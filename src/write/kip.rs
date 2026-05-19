@@ -132,9 +132,8 @@ impl Kip1Builder {
     ///
     /// # Default Behavior
     ///
-    /// If not set, the builder defaults to `0x3F` (`0b0011_1111`), which matches
-    /// linkle's behavior for AArch64. This differs from the C reference (`elf2kip.c`)
-    /// which sets `0x7F` (bit 6 set, enabling the Immortal flag).
+    /// If not set, the builder defaults to `0x3F` (`0b0011_1111`) for AArch64:
+    /// bits 0-5 set, with bit 6 (Immortal) left clear.
     ///
     /// The Immortal flag controls whether the kernel may terminate the process. It is
     /// typically set for system modules but is not required for most homebrew use cases.
@@ -272,12 +271,12 @@ impl Kip1Builder {
 
         // Compute flags if not explicitly set
         let flags = self.flags.unwrap_or({
-            // Default: 0x3F (matches linkle, differs from C reference 0x7F which sets Immortal bit)
+            // Default: 0x3F — bits 0-5 set, with Immortal (bit 6) left clear
             // Bits 0-2: compression enabled (text, rodata, data)
             // Bit 3: Is64Bit
             // Bit 4: IsAddrSpace32Bit
             // Bit 5: UseSystemPoolPartition
-            // Bit 6: Immortal (not set by default, unlike C reference)
+            // Bit 6: Immortal (left clear by default)
             0b0011_1111
         });
 

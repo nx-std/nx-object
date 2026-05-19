@@ -204,10 +204,6 @@ impl ElfSegments {
             builder = builder.build_id(build_id);
         }
 
-        if let Some(offset) = self.mod0_offset {
-            builder = builder.mod0_offset(offset);
-        }
-
         builder
     }
 

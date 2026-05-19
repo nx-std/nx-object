@@ -94,7 +94,7 @@ pub struct FromBytesError {
 #[error(transparent)]
 pub struct FromPtrError(FromBytesError);
 
-/// System language codes (matches libnx SetLanguage).
+/// System language codes.
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
 #[allow(clippy::upper_case_acronyms)]

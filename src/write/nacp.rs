@@ -141,29 +141,24 @@ impl NacpBuilder {
             nacp.display_version[..version_bytes.len()].copy_from_slice(version_bytes);
         }
 
-        // Set default metadata fields to match C nacptool behavior
-        // (vendor/switch-tools/src/nacptool.c lines 100-110)
+        // Set default metadata fields for a standard homebrew application
 
         // startup_user_account = 1 (require user account selection)
         nacp.startup_user_account = 1;
 
-        // supported_language_flag = 0xFFFF (all 16 languages)
-        // C tool sets 0xbff (12 languages), but we fill all 16 slots so use 0xFFFF
+        // supported_language_flag = 0xFFFF: all 16 language slots are populated
         nacp.supported_language_flag = 0xFFFF.into();
 
         // data_loss_confirmation = 1 (require confirmation for data that could be lost)
         nacp.data_loss_confirmation = 1;
 
-        // rating_age = all 0xFF (unrated for all regions)
-        // C tool uses specific pattern, but linkle uses 0xFF which is safer default
+        // rating_age = all 0xFF (unrated for all regions) — a safe default
         nacp.rating_age = [0xFF_u8 as i8; 0x20];
 
         // user_account_save_data_size = 0x3e00000 (65,011,712 bytes ≈ 62 MB)
-        // Default save data size from C nacptool
         nacp.user_account_save_data_size = 0x3e00000_u64.into();
 
         // user_account_save_data_journal_size = 0x180000 (1,572,864 bytes ≈ 1.5 MB)
-        // Default journal size from C nacptool
         nacp.user_account_save_data_journal_size = 0x180000_u64.into();
 
         // logo_type = 2, logo_handling = 1
@@ -174,7 +169,6 @@ impl NacpBuilder {
         // Fill other fields with little-endian values
         if let Some(id) = self.application_id {
             // When application_id is set, populate all title-id related fields
-            // as per linkle behavior (vendor/linkle/src/format/nacp.rs:251-277)
             nacp.presence_group_id = id.into();
             nacp.add_on_content_base_id = (id + 0x1000).into(); // DLC base offset
             nacp.save_data_owner_id = id.into();

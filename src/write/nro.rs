@@ -6,7 +6,7 @@ use zerocopy::FromZeros;
 
 use crate::raw::{
     build_id::BuildId,
-    nro::{ASSET_MAGIC, NRO_MAGIC, NroAssetHeader, NroHeader, NroSegment, NroStart},
+    nro::{ASSET_MAGIC, NRO_MAGIC, NroAssetHeader, NroHeader, NroSegment},
 };
 
 /// Builder for constructing NRO files.
@@ -19,7 +19,6 @@ pub struct NroBuilder {
     data_vaddr: u32,
     bss_size: u32,
     build_id: Option<BuildId>,
-    mod0_offset: Option<u32>,
     flags: u32,
     icon: Option<Vec<u8>>,
     nacp: Option<Vec<u8>>,
@@ -38,7 +37,6 @@ impl NroBuilder {
             data_vaddr: 0,
             bss_size: 0,
             build_id: None,
-            mod0_offset: None,
             flags: 0,
             icon: None,
             nacp: None,
@@ -96,14 +94,6 @@ impl NroBuilder {
         self
     }
 
-    /// Set the MOD0 offset (relative to NRO start).
-    ///
-    /// If not provided, defaults to 0.
-    pub fn mod0_offset(mut self, offset: u32) -> Self {
-        self.mod0_offset = Some(offset);
-        self
-    }
-
     /// Set the NRO flags field.
     ///
     /// Bit 0: Aligned header layout (0x1)
@@ -143,12 +133,11 @@ impl NroBuilder {
         let data_padded = pad_to_alignment(&data, 0x1000);
 
         // Calculate segment file offsets based on ELF vaddr layout.
-        // The C reference (elf2nro.c:171,222) sets file_off = p_vaddr and writes each
-        // segment at that file offset, preserving the ELF memory layout in the file.
-        // For typical homebrew ELFs with contiguous segments starting at vaddr 0,
-        // this yields sequential offsets (0x80, 0x80+text_len, 0x80+text_len+rodata_len).
-        // For ELFs with non-zero text base or vaddr gaps, segments must be padded
-        // to preserve the vaddr layout.
+        // Each segment's file offset equals its ELF virtual address, preserving the
+        // ELF memory layout in the file. For typical homebrew ELFs with contiguous
+        // segments starting at vaddr 0, this yields sequential offsets
+        // (0x80, 0x80+text_len, 0x80+text_len+rodata_len). For ELFs with a non-zero
+        // text base or vaddr gaps, segments are padded to preserve the vaddr layout.
         let text_offset = self.text_vaddr;
         let rodata_offset = self.rodata_vaddr;
         let data_offset = self.data_vaddr;
@@ -169,10 +158,11 @@ impl NroBuilder {
 
         let mut buf = vec![0u8; total_size];
 
-        // Write padded segments at their vaddr file offsets FIRST (C ref: elf2nro.c:220-224)
+        // Write padded segments at their vaddr file offsets FIRST.
         // This preserves the ELF vaddr layout with padding between segments if needed.
         // For typical homebrew ELFs with text_vaddr=0, the text segment starts at offset 0,
-        // and the header (written below) will overwrite the first 0x80 bytes of the text region.
+        // and the header (written below) overwrites bytes 0x10..0x80 of the text region,
+        // leaving the crt0-provided NroStart (0x00..0x10) intact.
         let text_start = text_offset as usize;
         let text_end = text_start + text_padded.len();
         buf[text_start..text_end].copy_from_slice(&text_padded);
@@ -185,12 +175,12 @@ impl NroBuilder {
         let data_end = data_start + data_padded.len();
         buf[data_start..data_end].copy_from_slice(&data_padded);
 
-        // Write NroStart at offset 0 (0x10 bytes) AFTER segments (C ref: elf2nro.c:226-227)
-        // This overwrites the beginning of the text segment region with the NRO header.
-        let mut start = NroStart::new_zeroed();
-        start.unused = 0.into();
-        start.mod_offset = self.mod0_offset.unwrap_or(0).into();
-        buf[0..0x10].copy_from_slice(zerocopy::IntoBytes::as_bytes(&start));
+        // The first 0x10 bytes (NroStart: entry branch instruction + MOD0 offset) belong
+        // to the text segment's crt0 and were written above with the text segment. The
+        // packer must NOT synthesize them — zeroing offset 0 destroys the entry branch
+        // instruction, so the loader jumps into an invalid instruction and the NRO fails
+        // to launch. Only the NroHeader at 0x10..0x80 is written here; bytes 0x00..0x10
+        // are left exactly as the text segment provided them.
 
         // Write NroHeader at offset 0x10 (0x70 bytes)
         let mut header = NroHeader::new_zeroed();

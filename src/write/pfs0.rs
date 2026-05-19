@@ -141,7 +141,7 @@ impl Pfs0Builder {
     ///
     /// Files are sorted alphabetically by name before being written to the archive.
     pub fn build(mut self) -> Result<Vec<u8>, BuildError> {
-        // Sort files alphabetically by name (linkle parity)
+        // Sort files alphabetically by name
         self.files.sort_by(|a, b| a.name.cmp(&b.name));
 
         let file_count = self.files.len() as u32;

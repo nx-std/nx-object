@@ -199,7 +199,6 @@ impl NsoBuilder {
         let data_offset = rodata_offset + rodata_data.len() as u32;
 
         // Use virtual addresses from ELF program headers (p_vaddr)
-        // These match the C reference (elf2nso.c:127) and linkle (nxo.rs:535,548,562)
         let text_mem_offset = self.text_vaddr;
         let rodata_mem_offset = self.rodata_vaddr;
         let data_mem_offset = self.data_vaddr;
@@ -214,16 +213,14 @@ impl NsoBuilder {
             memory_offset: text_mem_offset.into(),
             size: (text_padded.len() as u32).into(),
         };
-        // Set to 1 for C reference parity (elf2nso.c:134)
-        // This field aliases with Segments[0].AlignOrTotalSz in the C struct
+        // Set to 1; this field overlaps Segments[0].AlignOrTotalSz in the NSO header layout
         header.module_name_offset = 1.into();
         header.rodata = NsoSegmentHeader {
             file_offset: rodata_offset.into(),
             memory_offset: rodata_mem_offset.into(),
             size: (rodata_padded.len() as u32).into(),
         };
-        // Set to 1 for C reference parity (elf2nso.c:134)
-        // This field aliases with Segments[1].AlignOrTotalSz in the C struct
+        // Set to 1; this field overlaps Segments[1].AlignOrTotalSz in the NSO header layout
         header.module_name_size = 1.into();
         header.data = NsoSegmentHeader {
             file_offset: data_offset.into(),

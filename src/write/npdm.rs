@@ -208,7 +208,6 @@ impl KernelCapability {
                 is_io,
             } => {
                 // Trailer: 0b11_1111 (6 trailing 1-bits, produces 2 descriptors)
-                // C reference: npdmtool.c:721-729
                 // Descriptor 1: [31]=is_ro, [30:7]=address[23:0], [6:0]=0b0011_1111
                 // Descriptor 2: [31]=is_io_inverted, [27:24]=address[39:36], [23:7]=size[20:0], [6:0]=0b0011_1111
 
@@ -223,7 +222,7 @@ impl KernelCapability {
                 let mut desc2 = (*size as u32) & 0x000F_FFFF; // size[20:0]
                 desc2 |= (((*address >> 24) as u32) & 0xF) << 20; // address[39:36] at bits [23:20]
 
-                // Invert is_io flag (XOR with 1) per C reference
+                // The is_io flag is stored inverted in the descriptor
                 let is_io_inverted = !*is_io;
                 if is_io_inverted {
                     desc2 |= 1u32 << 24;
@@ -241,7 +240,6 @@ impl KernelCapability {
             }
             KernelCapability::MapRegion(regions) => {
                 // Trailer: 0b11_1111_1111 (10 trailing 1-bits)
-                // C reference: npdmtool.c:774-778
                 // Bit layout: [31:25]=region2, [24:18]=region1, [17:11]=region0, [10:0]=0b011_1111_1111
                 // Each region: [6:0]=(region_type[5:0] | (is_ro << 6))
                 let mut val = 0b11_1111_1111u32;
@@ -289,7 +287,6 @@ impl KernelCapability {
                 force_debug,
             } => {
                 // Trailer: 0b1111_1111_1111_1111 (16 trailing 1-bits)
-                // C reference: npdmtool.c:841
                 // desc = (allow_debug & 1) | ((force_debug_prod & 1) << 1) | ((force_debug & 1) << 2)
                 // Encoded as: (desc << 17) | 0xFFFF
                 // Bit layout: [19]=force_debug, [18]=force_debug_prod, [17]=allow_debug, [16:0]=0b01111_1111_1111_1111
