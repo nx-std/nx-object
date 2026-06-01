@@ -31,3 +31,6 @@ pub mod write;
 
 #[cfg(feature = "elf")]
 pub mod elf;
+
+#[cfg(feature = "blz")]
+mod blz;

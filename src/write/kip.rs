@@ -1,54 +1,23 @@
 //! KIP1 (Kernel Initial Process) builder.
 //!
 //! KIP1 is the format for system modules that execute in kernel mode.
-//! This module provides BLZ compression support and a builder for creating valid KIP1 files.
+//! This module provides a builder for creating valid KIP1 files.
 //!
 //! # BLZ Compression
 //!
-//! KIP1 segments (text, rodata, data) are compressed using the BLZ algorithm.
-//! This module wraps the `blz-nx` crate for compression.
+//! KIP1 segments (text, rodata, data) are compressed using the BLZ algorithm,
+//! implemented in the crate-private `blz` module.
 
-#[cfg(feature = "blz")]
-use std::io;
 use std::vec::Vec;
 
 use zerocopy::FromZeros;
 
-use crate::raw::kip::{KIP1_MAGIC, Kip1Header, Kip1Segment};
-
-/// Compress data using the BLZ algorithm.
-///
-/// This function allocates a buffer for the worst-case compression size,
-/// performs BLZ compression, and returns the compressed data.
-///
-/// # Arguments
-///
-/// * `uncompressed_data` - The data to compress (will be mutated by the compressor)
-///
-/// # Returns
-///
-/// The compressed data as a `Vec<u8>`, or an error if compression fails.
-///
-/// # Errors
-///
-/// Returns an error if the BLZ compression operation fails.
-#[cfg(feature = "blz")]
-pub fn compress_blz(uncompressed_data: &mut [u8]) -> io::Result<Vec<u8>> {
-    let mut compressed_data =
-        vec![0; blz_nx::get_worst_compression_buffer_size(uncompressed_data.len())];
-    let compressed_size =
-        blz_nx::compress_raw(uncompressed_data, &mut compressed_data).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("BLZ compressor error: {e:?}"),
-            )
-        })?;
-    compressed_data.truncate(compressed_size);
-    Ok(compressed_data)
-}
+use crate::{
+    blz,
+    raw::kip::{KIP1_MAGIC, Kip1Header, Kip1Segment},
+};
 
 /// Builder for constructing KIP1 files.
-#[cfg(feature = "blz")]
 pub struct Kip1Builder {
     name: Option<String>,
     title_id: u64,
@@ -68,7 +37,6 @@ pub struct Kip1Builder {
     kernel_capabilities: Vec<u32>,
 }
 
-#[cfg(feature = "blz")]
 impl Kip1Builder {
     /// Create a new KIP1 builder.
     pub fn new() -> Self {
@@ -220,8 +188,6 @@ impl Kip1Builder {
     /// - Process name is missing
     /// - BSS configuration is incomplete (only one of `bss_vaddr` or `bss_size` is set)
     /// - Kernel capabilities exceed 0x20 entries (32 u32 values)
-    /// - BLZ compression fails
-    #[cfg(feature = "blz")]
     pub fn build(self) -> Result<Vec<u8>, BuildError> {
         // Validate required fields
         let name = self.name.ok_or(BuildError::MissingName)?;
@@ -253,21 +219,13 @@ impl Kip1Builder {
             });
         }
 
-        // Clone segment data before compression (blz_nx::compress_raw mutates input)
-        let text_uncompressed_len = text.len();
-        let mut text_for_compression = text.clone();
-        let rodata_uncompressed_len = rodata.len();
-        let mut rodata_for_compression = rodata.clone();
-        let data_uncompressed_len = data.len();
-        let mut data_for_compression = data.clone();
-
         // Compress segments
-        let text_compressed =
-            compress_blz(&mut text_for_compression).map_err(BuildError::CompressionFailed)?;
-        let rodata_compressed =
-            compress_blz(&mut rodata_for_compression).map_err(BuildError::CompressionFailed)?;
-        let data_compressed =
-            compress_blz(&mut data_for_compression).map_err(BuildError::CompressionFailed)?;
+        let text_uncompressed_len = text.len();
+        let text_compressed = blz::compress(&text);
+        let rodata_uncompressed_len = rodata.len();
+        let rodata_compressed = blz::compress(&rodata);
+        let data_uncompressed_len = data.len();
+        let data_compressed = blz::compress(&data);
 
         // Compute flags if not explicitly set
         let flags = self.flags.unwrap_or({
@@ -362,7 +320,6 @@ impl Kip1Builder {
     }
 }
 
-#[cfg(feature = "blz")]
 impl Default for Kip1Builder {
     fn default() -> Self {
         Self::new()
@@ -370,7 +327,6 @@ impl Default for Kip1Builder {
 }
 
 /// Errors that can occur when building a KIP1 file.
-#[cfg(feature = "blz")]
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
     /// `build` was called before the process name was set.
@@ -415,11 +371,4 @@ pub enum BuildError {
         /// The number of capabilities provided.
         count: usize,
     },
-    /// BLZ compression of a segment failed.
-    ///
-    /// Raised when [`compress_blz`] cannot compress a text, rodata, or data
-    /// segment. The underlying [`std::io::Error`] carries the failure reported
-    /// by the BLZ compressor (for example, an undersized output buffer).
-    #[error("BLZ compression failed")]
-    CompressionFailed(#[source] io::Error),
 }

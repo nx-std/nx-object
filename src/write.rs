@@ -20,6 +20,7 @@
 //!     .expect("failed to build NACP");
 //! ```
 
+#[cfg(feature = "blz")]
 pub mod kip;
 pub mod nacp;
 pub mod npdm;
