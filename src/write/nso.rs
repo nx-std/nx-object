@@ -142,11 +142,11 @@ impl NsoBuilder {
             data_compressed,
         ) = if self.compress {
             (
-                lz4_compress(&text_padded)?,
+                lz4_compress(&text_padded),
                 true,
-                lz4_compress(&rodata_padded)?,
+                lz4_compress(&rodata_padded),
                 true,
-                lz4_compress(&data_padded)?,
+                lz4_compress(&data_padded),
                 true,
             )
         } else {
@@ -267,19 +267,21 @@ impl Default for NsoBuilder {
 /// Error returned by [`NsoBuilder::build`].
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
-    /// Text segment was not provided.
+    /// `build` was called before a text segment was set.
+    ///
+    /// The text segment is mandatory; the builder cannot emit an NSO without it.
     #[error("missing text segment")]
     MissingText,
-    /// Rodata segment was not provided.
+    /// `build` was called before a rodata segment was set.
+    ///
+    /// The rodata segment is mandatory; the builder cannot emit an NSO without it.
     #[error("missing rodata segment")]
     MissingRodata,
-    /// Data segment was not provided.
+    /// `build` was called before a data segment was set.
+    ///
+    /// The data segment is mandatory; the builder cannot emit an NSO without it.
     #[error("missing data segment")]
     MissingData,
-    /// LZ4 compression failed.
-    #[cfg(feature = "lz4")]
-    #[error("lz4 compression failed")]
-    CompressionFailed,
 }
 
 /// Pad a byte slice to the specified alignment.
@@ -302,6 +304,6 @@ fn sha256(data: &[u8]) -> [u8; 0x20] {
 
 /// Compress data with LZ4.
 #[cfg(feature = "lz4")]
-fn lz4_compress(data: &[u8]) -> Result<Vec<u8>, BuildError> {
-    Ok(lz4_flex::compress(data))
+fn lz4_compress(data: &[u8]) -> Vec<u8> {
+    lz4_flex::compress(data)
 }

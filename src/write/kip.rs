@@ -40,7 +40,7 @@ pub fn compress_blz(uncompressed_data: &mut [u8]) -> io::Result<Vec<u8>> {
         blz_nx::compress_raw(uncompressed_data, &mut compressed_data).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("BLZ compression failed: {e:?}"),
+                format!("BLZ compressor error: {e:?}"),
             )
         })?;
     compressed_data.truncate(compressed_size);
@@ -262,12 +262,12 @@ impl Kip1Builder {
         let mut data_for_compression = data.clone();
 
         // Compress segments
-        let text_compressed = compress_blz(&mut text_for_compression)
-            .map_err(|e| BuildError::CompressionFailed(e.to_string()))?;
-        let rodata_compressed = compress_blz(&mut rodata_for_compression)
-            .map_err(|e| BuildError::CompressionFailed(e.to_string()))?;
-        let data_compressed = compress_blz(&mut data_for_compression)
-            .map_err(|e| BuildError::CompressionFailed(e.to_string()))?;
+        let text_compressed =
+            compress_blz(&mut text_for_compression).map_err(BuildError::CompressionFailed)?;
+        let rodata_compressed =
+            compress_blz(&mut rodata_for_compression).map_err(BuildError::CompressionFailed)?;
+        let data_compressed =
+            compress_blz(&mut data_for_compression).map_err(BuildError::CompressionFailed)?;
 
         // Compute flags if not explicitly set
         let flags = self.flags.unwrap_or({
@@ -373,16 +373,24 @@ impl Default for Kip1Builder {
 #[cfg(feature = "blz")]
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
-    /// Process name was not provided.
+    /// `build` was called before the process name was set.
+    ///
+    /// The process name is a mandatory field of the KIP1 header.
     #[error("missing process name")]
     MissingName,
-    /// Text segment was not provided.
+    /// `build` was called before a text segment was set.
+    ///
+    /// The text segment is mandatory; the builder cannot emit a KIP1 without it.
     #[error("missing text segment")]
     MissingText,
-    /// Rodata segment was not provided.
+    /// `build` was called before a rodata segment was set.
+    ///
+    /// The rodata segment is mandatory; the builder cannot emit a KIP1 without it.
     #[error("missing rodata segment")]
     MissingRodata,
-    /// Data segment was not provided.
+    /// `build` was called before a data segment was set.
+    ///
+    /// The data segment is mandatory; the builder cannot emit a KIP1 without it.
     #[error("missing data segment")]
     MissingData,
     /// BSS configuration is incomplete
@@ -407,7 +415,11 @@ pub enum BuildError {
         /// The number of capabilities provided.
         count: usize,
     },
-    /// BLZ compression failed.
-    #[error("BLZ compression failed: {0}")]
-    CompressionFailed(String),
+    /// BLZ compression of a segment failed.
+    ///
+    /// Raised when [`compress_blz`] cannot compress a text, rodata, or data
+    /// segment. The underlying [`std::io::Error`] carries the failure reported
+    /// by the BLZ compressor (for example, an undersized output buffer).
+    #[error("BLZ compression failed")]
+    CompressionFailed(#[source] io::Error),
 }

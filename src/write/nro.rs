@@ -288,13 +288,19 @@ impl Default for NroBuilder {
 /// Error returned by [`NroBuilder::build`].
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
-    /// Text segment was not provided.
+    /// `build` was called before a text segment was set.
+    ///
+    /// The text segment is mandatory; the builder cannot emit an NRO without it.
     #[error("missing text segment")]
     MissingText,
-    /// Rodata segment was not provided.
+    /// `build` was called before a rodata segment was set.
+    ///
+    /// The rodata segment is mandatory; the builder cannot emit an NRO without it.
     #[error("missing rodata segment")]
     MissingRodata,
-    /// Data segment was not provided.
+    /// `build` was called before a data segment was set.
+    ///
+    /// The data segment is mandatory; the builder cannot emit an NRO without it.
     #[error("missing data segment")]
     MissingData,
 }

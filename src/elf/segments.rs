@@ -43,7 +43,7 @@ pub struct ElfSegments {
 impl ElfSegments {
     /// Parse an ELF file and extract segments for NRO/NSO generation.
     pub fn parse(data: &[u8]) -> Result<Self, ParseError> {
-        let elf = ElfFile64::<Endianness>::parse(data)?;
+        let elf = ElfFile64::<Endianness>::parse(data).map_err(ParseError::InvalidElf)?;
 
         // Verify architecture
         if elf.architecture() != object::Architecture::Aarch64 {
@@ -108,6 +108,9 @@ impl ElfSegments {
 
         // Extract MOD0 offset from text segment
         let mod0_offset = if text.len() >= 8 {
+            // SAFETY: the enclosing `text.len() >= 8` guard guarantees the
+            // `text[4..8]` slice is exactly 4 bytes, so the conversion into
+            // `[u8; 4]` cannot fail.
             let offset_bytes: [u8; 4] = text[4..8].try_into().unwrap();
             let offset = u32::from_le_bytes(offset_bytes);
             if offset > 0 && offset < text.len() as u32 {
@@ -244,22 +247,41 @@ impl ElfSegments {
 /// Error returned by [`ElfSegments::parse`].
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {
-    /// Invalid ELF file.
-    #[error("invalid ELF: {0}")]
-    InvalidElf(#[from] object::read::Error),
-    /// Unsupported architecture (expected AArch64).
+    /// The input bytes are not a well-formed ELF object.
+    ///
+    /// Returned when the `object` crate rejects the buffer while parsing the
+    /// ELF header or program headers. The wrapped [`object::read::Error`]
+    /// describes the structural defect.
+    #[error("invalid ELF")]
+    InvalidElf(#[source] object::read::Error),
+    /// The ELF targets an architecture other than AArch64.
+    ///
+    /// Switch executables are AArch64; an ELF compiled for any other machine
+    /// type cannot be turned into NRO/NSO segments.
     #[error("unsupported architecture: expected AArch64")]
     UnsupportedArch,
-    /// Missing text segment.
+    /// No text segment could be derived from the `PT_LOAD` segments.
+    ///
+    /// Occurs when the ELF contains zero loadable segments, leaving no segment
+    /// to map to the executable text region.
     #[error("missing text segment")]
     MissingText,
-    /// Missing rodata segment.
+    /// No rodata segment could be derived from the `PT_LOAD` segments.
+    ///
+    /// Occurs when the ELF exposes fewer than two loadable segments, leaving no
+    /// segment to map to the read-only data region.
     #[error("missing rodata segment")]
     MissingRodata,
-    /// Missing data segment.
+    /// No data segment could be derived from the `PT_LOAD` segments.
+    ///
+    /// Occurs when the ELF exposes fewer than three loadable segments, leaving
+    /// no segment to map to the writable data region.
     #[error("missing data segment")]
     MissingData,
-    /// PT_LOAD segment cannot be read.
+    /// A `PT_LOAD` segment's contents could not be read from the buffer.
+    ///
+    /// Raised when the program header points at a file range that lies outside
+    /// the supplied bytes. Holds the virtual address of the offending segment.
     #[error("PT_LOAD segment at address {0:#x} cannot be read")]
     UnreadableSegment(u64),
 }

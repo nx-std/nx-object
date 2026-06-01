@@ -495,13 +495,23 @@ impl Default for RomFsBuilder {
 /// Error returned by [`RomFsBuilder::build`].
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
-    /// RomFS has no files.
+    /// `build` was called without any files added.
+    ///
+    /// A RomFS image must contain at least one file; an empty builder has
+    /// nothing to serialize.
     #[error("empty romfs (no files added)")]
     Empty,
-    /// Invalid path format.
+    /// A registered path is not a valid RomFS path.
+    ///
+    /// Raised when a path cannot be represented in the RomFS tree, for example
+    /// because it is not absolute or contains an empty component. Holds the
+    /// offending path.
     #[error("invalid path: {path}")]
     InvalidPath { path: String },
-    /// Duplicate file or directory.
+    /// Two entries resolve to the same path.
+    ///
+    /// Raised when a file or directory is added more than once. Holds the
+    /// duplicated path.
     #[error("duplicate entry: {path}")]
     DuplicateEntry { path: String },
 }
@@ -510,17 +520,27 @@ pub enum BuildError {
 #[cfg(feature = "std")]
 #[derive(Debug, thiserror::Error)]
 pub enum FromDirectoryError {
-    /// I/O error while reading directory.
-    #[error("I/O error reading {}: {source}", path.display())]
+    /// A filesystem entry could not be read while walking the directory tree.
+    ///
+    /// Raised when reading directory entries or file contents fails. Holds the
+    /// path being read and the underlying [`std::io::Error`].
+    #[error("I/O error reading {}", path.display())]
     Io {
+        /// Path that was being read when the I/O error occurred.
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
-    /// Symlinks are not supported.
+    /// The directory tree contains a symbolic link.
+    ///
+    /// RomFS has no representation for symlinks, so they cannot be packed. Holds
+    /// the path of the symlink.
     #[error("symlinks not supported: {}", path.display())]
     Symlink { path: PathBuf },
-    /// Invalid file name (non-UTF8).
+    /// A file or directory name is not valid UTF-8.
+    ///
+    /// RomFS stores names as UTF-8; an entry whose name cannot be decoded is
+    /// rejected. Holds the offending path.
     #[error("invalid file name: {}", path.display())]
     InvalidFileName { path: PathBuf },
 }
