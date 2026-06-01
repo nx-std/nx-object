@@ -82,9 +82,8 @@
 
 use std::vec::Vec;
 
+use static_assertions::const_assert_eq;
 use zerocopy::{IntoBytes, little_endian::U32};
-
-use crate::raw::kip::Blz1Footer;
 
 /// Number of bits the flag mask is shifted between codes.
 const FLAG_SHIFT: u8 = 1;
@@ -96,6 +95,27 @@ const MATCH_THRESHOLD: usize = 2;
 const MAX_OFFSET: usize = 0x1002;
 /// Largest match length the encoding can represent.
 const MAX_MATCH: usize = (1 << 4) + MATCH_THRESHOLD;
+
+/// Trailer of a BLZ-packed stream.
+///
+/// Written at the very end of a compressed stream, it lets a decoder recover
+/// the layout while decompressing in place. The fields are little-endian and
+/// read from the end of the stream as `extra_len`, then `header_size`, then
+/// `enc_len`.
+#[derive(Debug, Clone, Copy, zerocopy::IntoBytes, zerocopy::Immutable)]
+#[repr(C)]
+struct Footer {
+    /// Length of the encoded region: packed bytes plus this trailer.
+    enc_len: U32,
+    /// Size of the trailer plus its `0xFF` alignment padding (always `>= 12`).
+    header_size: U32,
+    /// Decompressed bytes produced beyond the encoded region. Non-zero, which
+    /// distinguishes a packed stream from a stored one (whose trailer is `0`).
+    extra_len: U32,
+}
+
+// The trailer layout is fixed at 12 bytes (three little-endian u32s).
+const_assert_eq!(size_of::<Footer>(), 12);
 
 /// Compress `data` with the BLZ algorithm.
 ///
@@ -262,13 +282,13 @@ fn store_packed(
     }
 
     // Trailer (see module docs): enc_len, header_size, extra_len.
-    let footer = Blz1Footer {
+    let footer = Footer {
         enc_len: U32::new((best_packed + header_size) as u32),
         header_size: U32::new(header_size as u32),
         extra_len: U32::new((inc_len - header_size) as u32),
     };
-    output[pos..pos + size_of::<Blz1Footer>()].copy_from_slice(footer.as_bytes());
-    pos + size_of::<Blz1Footer>()
+    output[pos..pos + size_of::<Footer>()].copy_from_slice(footer.as_bytes());
+    pos + size_of::<Footer>()
 }
 
 /// Find the longest back-reference for the data starting at `pos`.

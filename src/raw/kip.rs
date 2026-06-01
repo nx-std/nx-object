@@ -63,25 +63,3 @@ pub struct Kip1Header {
 // Verify struct size - https://switchbrew.org/wiki/KIP#KIP_Header
 const_assert_eq!(size_of::<Kip1Header>(), 0x100);
 const_assert_eq!(align_of::<Kip1Header>(), 0x1);
-
-/// Trailer of a BLZ-packed KIP1 segment.
-///
-/// Written at the very end of a compressed segment, it lets a loader recover the
-/// layout while decompressing in place. The fields are little-endian and read
-/// from the end of the stream as `extra_len`, then `header_size`, then
-/// `enc_len`.
-#[derive(Debug, Clone, Copy, zerocopy::IntoBytes, zerocopy::Immutable)]
-#[repr(C)]
-pub struct Blz1Footer {
-    /// Length of the encoded region: packed bytes plus this trailer.
-    pub enc_len: U32,
-    /// Size of the trailer plus its `0xFF` alignment padding (always `>= 12`).
-    pub header_size: U32,
-    /// Decompressed bytes produced beyond the encoded region. Non-zero, which
-    /// distinguishes a packed stream from a stored one (whose trailer is `0`).
-    pub extra_len: U32,
-}
-
-// Verify struct size - https://switchbrew.org/wiki/KIP#KIP1_Decompression
-const_assert_eq!(size_of::<Blz1Footer>(), 12);
-const_assert_eq!(align_of::<Blz1Footer>(), 0x1);

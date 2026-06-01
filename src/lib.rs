@@ -25,10 +25,9 @@
 
 #[cfg(feature = "std")]
 mod blz;
+#[cfg(feature = "elf")]
+pub mod elf;
 pub mod raw;
 pub mod read;
 #[cfg(feature = "std")]
 pub mod write;
-#[cfg(feature = "elf")]
-pub mod elf;
-
