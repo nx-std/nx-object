@@ -16,8 +16,6 @@ default = []
 std = ["dep:fs-err", "dep:sha2", "dep:bit_field", "serde/std"]
 ## NSO compression/decompression
 lz4 = ["std", "dep:lz4_flex"]
-## KIP1 BLZ compression
-blz = ["std"]
 ## ELF parsing for NRO/NSO generation
 elf = ["std", "dep:object"]
 

@@ -42,7 +42,7 @@
 //!
 //! ```text
 //! [ raw prefix ][ packed region ][ 0xFF padding ][ enc_len ][ header_size ][ extra_len ]
-//!  \_ dec_len _/ \_ pak_len ____/ \________________ header_size (>= 12) ______________/
+//! \_ dec_len _/ \___ pak_len __/ \________________ header_size (>= 12) _______________/
 //! ```
 //!
 //! A leading raw prefix that the encoder left unpacked is followed by the
@@ -81,6 +81,10 @@
 //! - <https://switchbrew.org/wiki/KIP>
 
 use std::vec::Vec;
+
+use zerocopy::{IntoBytes, little_endian::U32};
+
+use crate::raw::kip::Blz1Footer;
 
 /// Number of bits the flag mask is shifted between codes.
 const FLAG_SHIFT: u8 = 1;
@@ -220,7 +224,7 @@ fn store_uncompressed(input: &[u8], output: &mut [u8]) -> usize {
         pos += 1;
     }
 
-    output[pos..pos + 4].copy_from_slice(&0u32.to_le_bytes());
+    output[pos..pos + 4].copy_from_slice(U32::new(0).as_bytes());
     pos + 4
 }
 
@@ -258,10 +262,13 @@ fn store_packed(
     }
 
     // Trailer (see module docs): enc_len, header_size, extra_len.
-    output[pos..pos + 4].copy_from_slice(&((best_packed + header_size) as u32).to_le_bytes());
-    output[pos + 4..pos + 8].copy_from_slice(&(header_size as u32).to_le_bytes());
-    output[pos + 8..pos + 12].copy_from_slice(&((inc_len - header_size) as u32).to_le_bytes());
-    pos + 12
+    let footer = Blz1Footer {
+        enc_len: U32::new((best_packed + header_size) as u32),
+        header_size: U32::new(header_size as u32),
+        extra_len: U32::new((inc_len - header_size) as u32),
+    };
+    output[pos..pos + size_of::<Blz1Footer>()].copy_from_slice(footer.as_bytes());
+    pos + size_of::<Blz1Footer>()
 }
 
 /// Find the longest back-reference for the data starting at `pos`.

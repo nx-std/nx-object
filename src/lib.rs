@@ -23,14 +23,12 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "std")]
+mod blz;
 pub mod raw;
 pub mod read;
-
 #[cfg(feature = "std")]
 pub mod write;
-
 #[cfg(feature = "elf")]
 pub mod elf;
 
-#[cfg(feature = "blz")]
-mod blz;
