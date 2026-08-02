@@ -1,5 +1,8 @@
 use static_assertions::const_assert_eq;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian::*};
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout,
+    little_endian::{U32, U64},
+};
 
 /// RomFS header (0x50 bytes) describing the filesystem structure.
 ///

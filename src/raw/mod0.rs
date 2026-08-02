@@ -1,5 +1,8 @@
 use static_assertions::const_assert_eq;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian::*};
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout,
+    little_endian::{I32, U32},
+};
 
 /// MOD0 magic number: "MOD0" in ASCII (0x30444f4d).
 pub const MOD0_MAGIC: u32 = 0x30444f4d;

@@ -30,14 +30,11 @@ pub struct ElfSegments {
     bss_size: u64,
     build_id: Option<[u8; 0x20]>,
     mod0_offset: Option<u32>,
-    #[allow(dead_code)]
-    dynamic: Option<SectionInfo>,
-    #[allow(dead_code)]
-    dynstr: Option<SectionInfo>,
-    #[allow(dead_code)]
-    dynsym: Option<SectionInfo>,
-    #[allow(dead_code)]
-    eh_frame_hdr: Option<SectionInfo>,
+    // Parsed for the MOD0 and NSO header section fields, which the writers still emit as zero.
+    _dynamic: Option<SectionInfo>,
+    _dynstr: Option<SectionInfo>,
+    _dynsym: Option<SectionInfo>,
+    _eh_frame_hdr: Option<SectionInfo>,
 }
 
 impl ElfSegments {
@@ -155,10 +152,10 @@ impl ElfSegments {
             bss_size,
             build_id,
             mod0_offset,
-            dynamic,
-            dynstr,
-            dynsym,
-            eh_frame_hdr,
+            _dynamic: dynamic,
+            _dynstr: dynstr,
+            _dynsym: dynsym,
+            _eh_frame_hdr: eh_frame_hdr,
         })
     }
 

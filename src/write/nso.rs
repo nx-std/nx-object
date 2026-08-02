@@ -19,7 +19,7 @@ pub struct NsoBuilder {
     data_vaddr: u32,
     bss_size: u32,
     module_id: Option<BuildId>,
-    #[cfg(feature = "lz4")]
+    #[cfg(feature = "lz4-compression")]
     compress: bool,
 }
 
@@ -40,7 +40,7 @@ impl NsoBuilder {
             data_vaddr: 0,
             bss_size: 0,
             module_id: None,
-            #[cfg(feature = "lz4")]
+            #[cfg(feature = "lz4-compression")]
             compress: true,
         }
     }
@@ -108,7 +108,7 @@ impl NsoBuilder {
     ///
     /// Compression is enabled by default when the `lz4` feature is active.
     /// This method is only available when the `lz4` feature is enabled.
-    #[cfg(feature = "lz4")]
+    #[cfg(feature = "lz4-compression")]
     pub fn compressed(mut self, compress: bool) -> Self {
         self.compress = compress;
         self
@@ -132,7 +132,7 @@ impl NsoBuilder {
         let data_hash = sha256(&data_padded);
 
         // Compress segments if enabled
-        #[cfg(feature = "lz4")]
+        #[cfg(feature = "lz4-compression")]
         let (
             text_data,
             text_compressed,
@@ -160,7 +160,7 @@ impl NsoBuilder {
             )
         };
 
-        #[cfg(not(feature = "lz4"))]
+        #[cfg(not(feature = "lz4-compression"))]
         let (
             text_data,
             text_compressed,
@@ -303,7 +303,7 @@ fn sha256(data: &[u8]) -> [u8; 0x20] {
 }
 
 /// Compress data with LZ4.
-#[cfg(feature = "lz4")]
+#[cfg(feature = "lz4-compression")]
 fn lz4_compress(data: &[u8]) -> Vec<u8> {
     lz4_flex::compress(data)
 }

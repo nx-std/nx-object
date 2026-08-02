@@ -1,5 +1,8 @@
 use static_assertions::const_assert_eq;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian::*};
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout,
+    little_endian::{U16, U32, U64},
+};
 
 /// Language-specific title and publisher information.
 ///

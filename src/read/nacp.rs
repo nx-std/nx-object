@@ -97,7 +97,6 @@ pub struct FromPtrError(FromBytesError);
 /// System language codes.
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
-#[allow(clippy::upper_case_acronyms)]
 pub enum SetLanguage {
     /// Japanese
     JA = 0,

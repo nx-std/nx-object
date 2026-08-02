@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 use static_assertions::const_assert_eq;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian::*};
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian::U32};
 
 /// NSO magic number: "NSO0" in ASCII (0x304f534e).
 pub const NSO_MAGIC: u32 = 0x304f534e;

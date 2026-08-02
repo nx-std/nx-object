@@ -131,7 +131,7 @@ impl RomFsBuilder {
     /// Build from a directory on the filesystem.
     ///
     /// Recursively adds all files from the given directory.
-    #[cfg(feature = "std")]
+    #[cfg(feature = "filesystem-support")]
     pub fn from_directory(path: impl AsRef<std::path::Path>) -> Result<Self, FromDirectoryError> {
         use fs_err as fs;
 
@@ -517,7 +517,7 @@ pub enum BuildError {
 }
 
 /// Error returned by [`RomFsBuilder::from_directory`].
-#[cfg(feature = "std")]
+#[cfg(feature = "filesystem-support")]
 #[derive(Debug, thiserror::Error)]
 pub enum FromDirectoryError {
     /// A filesystem entry could not be read while walking the directory tree.

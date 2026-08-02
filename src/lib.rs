@@ -21,13 +21,13 @@
 //! - [switchbrew NPDM](https://switchbrew.org/wiki/NPDM)
 //! - [switchbrew RomFS](https://switchbrew.org/wiki/RomFS)
 
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "filesystem-support"), no_std)]
 
-#[cfg(feature = "std")]
+#[cfg(feature = "filesystem-support")]
 mod blz;
-#[cfg(feature = "elf")]
+#[cfg(feature = "elf-parsing")]
 pub mod elf;
 pub mod raw;
 pub mod read;
-#[cfg(feature = "std")]
+#[cfg(feature = "filesystem-support")]
 pub mod write;

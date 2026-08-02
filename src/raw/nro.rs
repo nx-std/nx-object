@@ -1,5 +1,8 @@
 use static_assertions::const_assert_eq;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian::*};
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout,
+    little_endian::{U32, U64},
+};
 
 /// NRO magic number: "NRO0" in ASCII (0x304f524e).
 pub const NRO_MAGIC: u32 = 0x304f524e;

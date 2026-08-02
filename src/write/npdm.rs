@@ -367,7 +367,7 @@ pub struct ServiceAccess {
 /// ACI0 (Access Control Info) section data.
 ///
 /// Contains the actual runtime permissions for the application.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct AciData {
     /// Program ID (Title ID)
     pub program_id: u64,
@@ -377,18 +377,6 @@ pub struct AciData {
     pub service_access: ServiceAccess,
     /// Kernel capabilities
     pub kernel_capabilities: Vec<KernelCapability>,
-}
-
-#[allow(clippy::derivable_impls)]
-impl Default for AciData {
-    fn default() -> Self {
-        Self {
-            program_id: 0,
-            filesystem_access: FilesystemAccess::default(),
-            service_access: ServiceAccess::default(),
-            kernel_capabilities: Vec::new(),
-        }
-    }
 }
 
 /// ACID (Access Control Info Descriptor) section data.

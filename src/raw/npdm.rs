@@ -1,5 +1,8 @@
 use static_assertions::const_assert_eq;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian::*};
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout,
+    little_endian::{U32, U64},
+};
 
 /// META magic number: "META" in ASCII (0x4154454d).
 pub const META_MAGIC: u32 = 0x4154454d;

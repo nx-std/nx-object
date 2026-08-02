@@ -1,5 +1,5 @@
 use static_assertions::const_assert_eq;
-use zerocopy::little_endian::*;
+use zerocopy::little_endian::{U32, U64};
 
 /// KIP1 magic number: "KIP1" in ASCII (0x3150494b).
 pub const KIP1_MAGIC: u32 = 0x3150494b;

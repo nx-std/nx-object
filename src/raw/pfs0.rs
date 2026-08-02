@@ -1,5 +1,8 @@
 use static_assertions::const_assert_eq;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian::*};
+use zerocopy::{
+    FromBytes, Immutable, IntoBytes, KnownLayout,
+    little_endian::{U32, U64},
+};
 
 /// PFS0 magic number: "PFS0" in ASCII (0x30534650).
 pub const PFS0_MAGIC: u32 = 0x30534650;
