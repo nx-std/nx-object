@@ -136,9 +136,9 @@ impl<'a> RomFs<'a> {
         }
 
         // Start from root
-        let mut current_dir = self.root_dir().map_err(|e| OpenError::BufferTooSmall {
-            required: e.required,
-            available: e.available,
+        let mut current_dir = self.root_dir().map_err(|err| OpenError::BufferTooSmall {
+            required: err.required,
+            available: err.available,
         })?;
 
         // Split path and traverse

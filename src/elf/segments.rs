@@ -108,7 +108,9 @@ impl ElfSegments {
             // SAFETY: the enclosing `text.len() >= 8` guard guarantees the
             // `text[4..8]` slice is exactly 4 bytes, so the conversion into
             // `[u8; 4]` cannot fail.
-            let offset_bytes: [u8; 4] = text[4..8].try_into().unwrap();
+            let offset_bytes: [u8; 4] = text[4..8]
+                .try_into()
+                .expect("a 4-byte slice converts into [u8; 4]");
             let offset = u32::from_le_bytes(offset_bytes);
             if offset > 0 && offset < text.len() as u32 {
                 Some(offset)

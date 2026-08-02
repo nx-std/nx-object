@@ -1,33 +1,14 @@
 //! NPDM (Nintendo Program Description Metadata) builder.
 //!
-//! This module provides types and builders for creating NPDM files, which contain
-//! program metadata, access control information, and kernel capabilities for
-//! Nintendo Switch applications and system modules.
-//!
-//! # Structure
-//!
-//! An NPDM file consists of three sections:
+//! An NPDM carries the program metadata, access control information, and kernel
+//! capabilities the loader reads before a title is started. It has three sections:
 //! - META header: Basic program information (name, version, thread config)
 //! - ACID: Access Control Info Descriptor (RSA-signed permissions, optional for homebrew)
 //! - ACI0: Access Control Info (runtime permissions: filesystem, services, kernel caps)
 //!
-//! # Example
-//!
-//! ```no_run
-//! # use nx_object::write::npdm::{NpdmBuilder, NpdmMetadata, KernelCapability};
-//! let metadata = NpdmMetadata {
-//!     name: "MyApp".to_string(),
-//!     title_id: 0x0100000000010000,
-//!     version: 0,
-//!     main_thread_priority: 44,
-//!     default_cpu_id: 0,
-//!     main_thread_stack_size: 0x100000,
-//!     flags: 0,
-//! };
-//!
-//! let npdm_bytes = NpdmBuilder::new(metadata).build();
-//! std::fs::write("output.npdm", npdm_bytes).unwrap();
-//! ```
+//! The sections are laid out in that order, each starting on a 16-byte boundary, and
+//! the META header records the offset and size of the other two. Every offset is
+//! therefore computed before any bytes are emitted.
 
 use std::collections::HashMap;
 
