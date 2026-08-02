@@ -131,6 +131,12 @@ impl RomFsBuilder {
     /// Build from a directory on the filesystem.
     ///
     /// Recursively adds all files from the given directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tree cannot be walked or a file cannot be read, if
+    /// a name is not valid UTF-8, or if a symlink is encountered: RomFS has no
+    /// representation for one, so it is refused rather than followed or skipped.
     #[cfg(feature = "filesystem-support")]
     pub fn from_directory(path: impl AsRef<std::path::Path>) -> Result<Self, FromDirectoryError> {
         use fs_err as fs;
@@ -200,6 +206,13 @@ impl RomFsBuilder {
     }
 
     /// Build the complete RomFS image.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no file was ever added, or if an entry's path is
+    /// invalid or duplicates one already present. An empty image is refused rather
+    /// than produced, because a RomFS with no files is almost always a mis-pointed
+    /// asset directory.
     pub fn build(mut self) -> Result<Vec<u8>, BuildError> {
         if self.files.is_empty() {
             return Err(BuildError::Empty);

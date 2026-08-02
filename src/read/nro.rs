@@ -1,3 +1,13 @@
+//! Validated reader over an NRO image and its optional asset section.
+//!
+//! [`Nro::try_from_bytes`] checks the magic and proves every segment lies inside
+//! the buffer before borrowing it, so the segment accessors return slices without
+//! re-checking and cannot panic on a malformed image.
+//!
+//! The asset section is optional and detected by its own magic past the end of the
+//! executable, so the asset accessors return `None` for a bare NRO rather than
+//! failing.
+
 use zerocopy::FromBytes;
 
 use crate::raw::nro::{
@@ -14,6 +24,13 @@ pub struct Nro<'a> {
 
 impl<'a> Nro<'a> {
     /// Parse NRO from bytes with magic and size validation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer cannot hold the start stub and header, if
+    /// the magic does not match, or if any segment's offset and size overflow or
+    /// run past the end of the buffer. A missing asset section is not an error:
+    /// the asset accessors return `None` for a bare NRO.
     pub fn try_from_bytes(bytes: &'a [u8]) -> Result<Self, FromBytesError> {
         // Validate minimum size for start + header
         let min_size = size_of::<NroStart>() + size_of::<NroHeader>();

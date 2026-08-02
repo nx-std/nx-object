@@ -11,6 +11,7 @@ mod nso;
 mod romfs;
 
 pub use self::{
+    mod0::{FromBytesError as Mod0FromBytesError, FromPtrError as Mod0FromPtrError, Mod0},
     nacp::{
         FromBytesError as NacpFromBytesError, FromPtrError as NacpFromPtrError, Nacp, SetLanguage,
     },

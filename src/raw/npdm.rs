@@ -1,3 +1,13 @@
+//! The three NPDM section headers: META, ACID and ACI0.
+//!
+//! Each header is a fixed size, but the sections themselves are variable-length:
+//! the META header records where ACID and ACI0 begin and how long they are, and
+//! each of those in turn records the offsets of its own filesystem-access,
+//! service-access and kernel-capability blocks.
+//!
+//! Every offset inside ACID or ACI0 is relative to that section's own start, not
+//! to the image.
+
 use static_assertions::const_assert_eq;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout,

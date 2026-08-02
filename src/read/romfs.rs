@@ -1,3 +1,13 @@
+//! Validated reader over a RomFS image, with directory traversal and file lookup.
+//!
+//! RomFS carries no magic, so [`RomFs::try_from_bytes`] can only check the header's
+//! self-reported size and table extents — a buffer that satisfies those parses
+//! whether or not it is a RomFS.
+//!
+//! Entries are addressed by byte offset into the metadata tables rather than by
+//! index, and the tables are read on demand, so traversal and [`RomFs::open`] are
+//! fallible at every step rather than only at construction.
+
 use zerocopy::FromBytes;
 
 use crate::raw::romfs::{RomFsDirEntry, RomFsFileEntry, RomFsHeader};
@@ -10,6 +20,13 @@ pub struct RomFs<'a> {
 
 impl<'a> RomFs<'a> {
     /// Parse RomFS from bytes with header validation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer is shorter than the header, if the header's
+    /// self-reported size is not the expected one, or if any of the four tables it
+    /// locates extends past the end of the buffer. RomFS carries no magic, so a
+    /// buffer that satisfies those checks parses whether or not it is one.
     pub fn try_from_bytes(bytes: &'a [u8]) -> Result<Self, FromBytesError> {
         if bytes.len() < size_of::<RomFsHeader>() {
             return Err(FromBytesError::BufferTooSmall {
@@ -122,6 +139,12 @@ impl<'a> RomFs<'a> {
     }
 
     /// Get root directory
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory metadata table is too small to hold an
+    /// entry at its start, which means the image declares a table it does not
+    /// contain.
     pub fn root_dir(&'a self) -> Result<RomFsDir<'a>, RootDirError> {
         // Root directory is at offset 0 in dir meta table
         let dir_table_offset = self.header.dir_meta_table_offset.get() as usize;
@@ -129,6 +152,14 @@ impl<'a> RomFs<'a> {
     }
 
     /// Open a file by path (e.g., "/config.json")
+    ///
+    /// # Errors
+    ///
+    /// Distinguishes an empty path, a missing intermediate directory, and a
+    /// missing final component, so a caller can tell "no such directory" from "no
+    /// such file". Returns [`OpenError::BufferTooSmall`] instead if traversal runs
+    /// off the end of a metadata table, which means the image is malformed rather
+    /// than the path absent.
     pub fn open(&'a self, path: &str) -> Result<RomFsFile<'a>, OpenError> {
         let path = path.trim_start_matches('/');
         if path.is_empty() {
@@ -388,6 +419,8 @@ impl<'a> RomFsFile<'a> {
     }
 
     /// Get the file contents.
+    ///
+    /// # Errors
     ///
     /// Returns an error if file data offset+size is out of bounds. This indicates a malformed
     /// RomFS where the file metadata table contains invalid data offsets that were not validated

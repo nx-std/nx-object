@@ -39,6 +39,13 @@ pub struct ElfSegments {
 
 impl ElfSegments {
     /// Parse an ELF file and extract segments for NRO/NSO generation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bytes are not a valid ELF, if it targets anything
+    /// other than AArch64, if a `PT_LOAD` segment cannot be read, or if the text,
+    /// rodata, or data segment is absent — all three are required, since the
+    /// container formats have a slot for each.
     pub fn parse(data: &[u8]) -> Result<Self, ParseError> {
         let elf = ElfFile64::<Endianness>::parse(data).map_err(ParseError::InvalidElf)?;
 

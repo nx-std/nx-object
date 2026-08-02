@@ -1,3 +1,15 @@
+//! Validated reader over an NPDM descriptor.
+//!
+//! [`Npdm::try_from_bytes`] checks all three magics and proves the ACID and ACI0
+//! sections lie inside the buffer, so the header accessors borrow without
+//! re-checking.
+//!
+//! Validation stops at the section boundary: the filesystem-access,
+//! service-access and kernel-capability blocks nested inside ACI0 are bounds
+//! checked when they are asked for, which is why those accessors return `Result`
+//! while the header ones do not. Their offsets are relative to the enclosing
+//! section, so resolving one means adding the section's own offset first.
+
 use zerocopy::FromBytes;
 
 use crate::raw::npdm::{ACI0_MAGIC, ACID_MAGIC, Aci0Header, AcidHeader, META_MAGIC, NpdmHeader};
@@ -75,6 +87,14 @@ pub struct Npdm<'a> {
 
 impl<'a> Npdm<'a> {
     /// Parse NPDM from bytes with magic and size validation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer is shorter than the META header, if any of
+    /// the three magics does not match, or if the ACID or ACI0 section the META
+    /// header points at extends past the end of the buffer. The blocks nested
+    /// inside ACI0 are not checked here; see [`Npdm::aci0_fac_data`] and its
+    /// siblings.
     pub fn try_from_bytes(bytes: &'a [u8]) -> Result<Self, FromBytesError> {
         // Validate minimum size for META header
         if bytes.len() < size_of::<NpdmHeader>() {

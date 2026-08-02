@@ -1,3 +1,15 @@
+//! The PFS0 header and file entry table.
+//!
+//! A PFS0 is four regions in a fixed order: the header, one entry per file, a
+//! string table holding the names, and the file data. Neither of the two offsets
+//! in an entry is absolute — `offset` is measured from the start of the data
+//! region and `string_table_offset` from the start of the string table — so both
+//! need the header's counts to resolve.
+//!
+//! Names in the string table are null-terminated and the entry carries no length
+//! for them. The table is padded to a 0x20-byte boundary, so its recorded size
+//! exceeds the sum of the names it holds.
+
 use static_assertions::const_assert_eq;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout,

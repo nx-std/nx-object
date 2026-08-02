@@ -121,6 +121,12 @@ impl NroBuilder {
     }
 
     /// Build the complete NRO file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the text, rodata, or data segment was never set. The
+    /// assets are optional and their absence is not an error: with none set, the
+    /// output carries no asset section at all rather than an empty one.
     pub fn build(self) -> Result<Vec<u8>, BuildError> {
         // Validate required fields
         let text = self.text.ok_or(BuildError::MissingText)?;

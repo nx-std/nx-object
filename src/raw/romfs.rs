@@ -1,3 +1,13 @@
+//! The RomFS header and its directory and file entry structures.
+//!
+//! RomFS stores its tree as four tables the header locates: a hash table and a
+//! metadata table for directories, and the same pair for files. Entries live in
+//! the metadata tables and are chained by offsets into them, so an entry is
+//! addressed by its byte offset rather than by an index.
+//!
+//! Each entry is followed by its variable-length name, which is why the asserted
+//! sizes here cover only the fixed prefix.
+
 use static_assertions::const_assert_eq;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout,

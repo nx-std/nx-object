@@ -1,3 +1,13 @@
+//! Validated reader over an NSO image.
+//!
+//! [`Nso::try_from_bytes`] checks the magic and proves each segment's compressed
+//! extent lies inside the buffer, so the segment accessors return slices without
+//! re-checking and cannot panic on a malformed image.
+//!
+//! The slices they return are the bytes as stored: still compressed when the
+//! matching flag is set, and unverified against the header's SHA-256 hashes, which
+//! cover the decompressed form. Decompression and hash checking are the caller's.
+
 use zerocopy::FromBytes;
 
 use crate::raw::nso::{NSO_MAGIC, NsoFlags, NsoHeader};
@@ -10,6 +20,13 @@ pub struct Nso<'a> {
 
 impl<'a> Nso<'a> {
     /// Parse NSO from bytes with magic and size validation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer is shorter than the header, if the magic
+    /// does not match, or if a segment's stored extent runs past the end of the
+    /// buffer. The extents checked are the compressed ones actually occupying the
+    /// file, so success does not imply a segment decompresses to its declared size.
     pub fn try_from_bytes(bytes: &'a [u8]) -> Result<Self, FromBytesError> {
         if bytes.len() < size_of::<NsoHeader>() {
             return Err(FromBytesError::BufferTooSmall {

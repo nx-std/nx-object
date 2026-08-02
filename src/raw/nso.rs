@@ -1,3 +1,14 @@
+//! The NSO header, its segment descriptors, and the flags gating them.
+//!
+//! A segment's size is split across two places: [`NsoSegmentHeader::size`] is the
+//! decompressed size, while the compressed length actually occupying the file is
+//! held separately in the header's `*_file_size` fields. Which of the two applies
+//! depends on the per-segment compression bit in `flags`, and the SHA-256 hashes
+//! are taken over the decompressed bytes.
+//!
+//! The `.dynstr`, `.dynsym` and embedded-data offsets are relative to the start of
+//! the rodata segment, not to the image.
+
 use bitflags::bitflags;
 use static_assertions::const_assert_eq;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian::U32};

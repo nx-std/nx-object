@@ -1,3 +1,9 @@
+//! The MOD0 header embedded in NRO and NSO executables.
+//!
+//! Every offset in the header is signed and relative to the MOD0 header's own
+//! address, not to the start of the image — the header sits inside the text
+//! segment, so the sections it points at may precede it.
+
 use static_assertions::const_assert_eq;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout,

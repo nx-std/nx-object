@@ -1,3 +1,14 @@
+//! Validated reader over a NACP control structure.
+//!
+//! A NACP carries no magic, so [`Nacp::try_from_bytes`] can only check that the
+//! buffer is large enough — any 0x4000 bytes will parse. A caller that has not
+//! established the bytes are a NACP by other means learns nothing from success
+//! here.
+//!
+//! Title and publisher live in a 16-entry language table that is sparse: an entry
+//! is present only for the languages the title ships, so lookups return `Option`
+//! and [`Nacp::language_entry_for`] falls back to the first populated entry.
+
 use zerocopy::FromBytes;
 
 use crate::raw::nacp::{NacpLanguageEntry, NacpStruct};
@@ -9,6 +20,12 @@ pub struct Nacp<'a> {
 
 impl<'a> Nacp<'a> {
     /// Parse NACP from bytes with validation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only if the buffer is shorter than a NACP. There is no
+    /// magic to check, so any buffer of sufficient length parses and success says
+    /// nothing about whether the bytes are really a NACP.
     pub fn try_from_bytes(bytes: &'a [u8]) -> Result<Self, FromBytesError> {
         if bytes.len() < size_of::<NacpStruct>() {
             return Err(FromBytesError {

@@ -1,3 +1,13 @@
+//! The NRO start stub, header, and the optional asset section that follows it.
+//!
+//! An NRO begins with a branch stub rather than its magic: [`NroStart`] occupies
+//! the first 0x10 bytes and [`NroHeader`]'s magic sits after it, so a reader that
+//! checks offset zero for `NRO0` will not find it.
+//!
+//! The asset section is appended past the end the header reports and is optional:
+//! its own `ASET` magic at that offset is what distinguishes an NRO carrying an
+//! icon, NACP and RomFS from a bare one.
+
 use static_assertions::const_assert_eq;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout,

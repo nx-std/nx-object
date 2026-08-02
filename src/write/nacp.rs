@@ -94,6 +94,12 @@ impl NacpBuilder {
     }
 
     /// Build the NACP structure, returning the complete 0x4000-byte buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a name, author, or version exceeds the fixed width its
+    /// field reserves. The fields are not truncated to fit, because a silently
+    /// shortened title is indistinguishable from an intended one.
     pub fn build(self) -> Result<Vec<u8>, BuildError> {
         // Create zeroed buffer
         let mut buf = vec![0u8; 0x4000];

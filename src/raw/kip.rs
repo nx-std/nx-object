@@ -1,3 +1,12 @@
+//! KIP1 header and segment descriptors.
+//!
+//! A KIP1 is the initial-process format: a 0x100-byte header followed by six
+//! segments whose descriptors carry both the compressed and decompressed sizes,
+//! because the loader decompresses each segment in place.
+//!
+//! Both structures are byte-aligned and size-asserted, so either may be mapped
+//! onto a slice at any offset.
+
 use static_assertions::const_assert_eq;
 use zerocopy::little_endian::{U32, U64};
 

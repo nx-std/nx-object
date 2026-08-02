@@ -1,3 +1,12 @@
+//! The NACP control structure and its nested configuration blocks.
+//!
+//! A NACP is a fixed 0x4000 bytes with no length prefix or terminator: every
+//! field sits at a constant offset and unused space is zero-filled, so the
+//! structure is mapped whole rather than parsed incrementally.
+//!
+//! Text fields are fixed-width, null-padded byte arrays rather than strings; a
+//! value that fills its array has no terminator.
+
 use static_assertions::const_assert_eq;
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout,

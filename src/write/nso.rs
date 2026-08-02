@@ -115,6 +115,10 @@ impl NsoBuilder {
     }
 
     /// Build the complete NSO file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the text, rodata, or data segment was never set.
     pub fn build(self) -> Result<Vec<u8>, BuildError> {
         // Validate required fields
         let text = self.text.ok_or(BuildError::MissingText)?;
