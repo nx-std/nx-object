@@ -6,7 +6,6 @@ edition = "2024"
 [lib]
 name = "nx_object"
 crate-type = ["rlib"]
-test = false
 doctest = false
 bench = false
 
