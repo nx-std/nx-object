@@ -14,69 +14,6 @@ use zerocopy::FromBytes;
 
 use crate::raw::npdm::{ACI0_MAGIC, ACID_MAGIC, Aci0Header, AcidHeader, META_MAGIC, NpdmHeader};
 
-/// Errors that can occur when parsing NPDM from bytes
-#[derive(Debug, thiserror::Error)]
-pub enum FromBytesError {
-    /// Buffer is too small to contain the required data
-    #[error("buffer too small: need {required} bytes, have {available}")]
-    BufferTooSmall {
-        /// Number of bytes required
-        required: usize,
-        /// Number of bytes available
-        available: usize,
-    },
-    /// META header magic does not match expected value (0x4154454d)
-    #[error("invalid META magic: expected 0x4154454d (META), found {found:#010x}")]
-    InvalidMetaMagic {
-        /// Found magic number
-        found: u32,
-    },
-    /// ACID header magic does not match expected value (0x44494341)
-    #[error("invalid ACID magic: expected 0x44494341 (ACID), found {found:#010x}")]
-    InvalidAcidMagic {
-        /// Found magic number
-        found: u32,
-    },
-    /// ACI0 header magic does not match expected value (0x30494341)
-    #[error("invalid ACI0 magic: expected 0x30494341 (ACI0), found {found:#010x}")]
-    InvalidAci0Magic {
-        /// Found magic number
-        found: u32,
-    },
-    /// ACID size field contains invalid value
-    #[error("invalid ACID size: expected {}, found {found}", size_of::<AcidHeader>())]
-    InvalidAcidSize {
-        /// Found size value
-        found: usize,
-    },
-    /// ACI0 size field contains invalid value
-    #[error("invalid ACI0 size: expected {}, found {found}", size_of::<Aci0Header>())]
-    InvalidAci0Size {
-        /// Found size value
-        found: usize,
-    },
-    /// ACI0 inner section offset+size exceeds buffer bounds
-    ///
-    /// This occurs when an ACI0 inner section (FAC, SAC, or KC) has an offset+size
-    /// that extends beyond the NPDM buffer. A crafted NPDM can have valid ACI0 bounds
-    /// but oversized inner section offset+size values.
-    #[error(
-        "ACI0 {section} section out of bounds: offset {offset} + size {size} = {end} > buffer size {buffer_size}"
-    )]
-    Aci0InnerSectionOutOfBounds {
-        /// Section name ("FAC", "SAC", or "KC")
-        section: &'static str,
-        /// Section offset (relative to ACI0 start)
-        offset: usize,
-        /// Section size in bytes
-        size: usize,
-        /// Computed end position (offset + size)
-        end: usize,
-        /// Buffer size
-        buffer_size: usize,
-    },
-}
-
 /// High-level NPDM parser with access to META, ACID, and ACI0 sections.
 pub struct Npdm<'a> {
     bytes: &'a [u8],
@@ -338,4 +275,67 @@ impl<'a> Npdm<'a> {
 
         Ok(&self.bytes[start..end])
     }
+}
+
+/// Errors that can occur when parsing NPDM from bytes
+#[derive(Debug, thiserror::Error)]
+pub enum FromBytesError {
+    /// Buffer is too small to contain the required data
+    #[error("buffer too small: need {required} bytes, have {available}")]
+    BufferTooSmall {
+        /// Number of bytes required
+        required: usize,
+        /// Number of bytes available
+        available: usize,
+    },
+    /// META header magic does not match expected value (0x4154454d)
+    #[error("invalid META magic: expected 0x4154454d (META), found {found:#010x}")]
+    InvalidMetaMagic {
+        /// Found magic number
+        found: u32,
+    },
+    /// ACID header magic does not match expected value (0x44494341)
+    #[error("invalid ACID magic: expected 0x44494341 (ACID), found {found:#010x}")]
+    InvalidAcidMagic {
+        /// Found magic number
+        found: u32,
+    },
+    /// ACI0 header magic does not match expected value (0x30494341)
+    #[error("invalid ACI0 magic: expected 0x30494341 (ACI0), found {found:#010x}")]
+    InvalidAci0Magic {
+        /// Found magic number
+        found: u32,
+    },
+    /// ACID size field contains invalid value
+    #[error("invalid ACID size: expected {}, found {found}", size_of::<AcidHeader>())]
+    InvalidAcidSize {
+        /// Found size value
+        found: usize,
+    },
+    /// ACI0 size field contains invalid value
+    #[error("invalid ACI0 size: expected {}, found {found}", size_of::<Aci0Header>())]
+    InvalidAci0Size {
+        /// Found size value
+        found: usize,
+    },
+    /// ACI0 inner section offset+size exceeds buffer bounds
+    ///
+    /// This occurs when an ACI0 inner section (FAC, SAC, or KC) has an offset+size
+    /// that extends beyond the NPDM buffer. A crafted NPDM can have valid ACI0 bounds
+    /// but oversized inner section offset+size values.
+    #[error(
+        "ACI0 {section} section out of bounds: offset {offset} + size {size} = {end} > buffer size {buffer_size}"
+    )]
+    Aci0InnerSectionOutOfBounds {
+        /// Section name ("FAC", "SAC", or "KC")
+        section: &'static str,
+        /// Section offset (relative to ACI0 start)
+        offset: usize,
+        /// Section size in bytes
+        size: usize,
+        /// Computed end position (offset + size)
+        end: usize,
+        /// Buffer size
+        buffer_size: usize,
+    },
 }
