@@ -9,6 +9,8 @@ const ROMFS_ENTRY_EMPTY: u32 = 0xFFFFFFFF;
 
 /// Internal directory entry for building RomFS.
 struct DirEntry {
+    /// Full path from the image root, e.g. `/textures/ui`. Empty for the root.
+    path: String,
     name: String,
     entry_offset: u32,
     children: Vec<usize>,
@@ -18,6 +20,8 @@ struct DirEntry {
 
 /// Internal file entry for building RomFS.
 struct FileEntry {
+    /// Full path from the image root, e.g. `/textures/ui/button.png`.
+    path: String,
     name: String,
     data: Vec<u8>,
     entry_offset: u32,
@@ -39,6 +43,7 @@ impl RomFsBuilder {
         // Initialize with root directory
         Self {
             dirs: vec![DirEntry {
+                path: String::new(),
                 name: String::new(),
                 entry_offset: 0,
                 children: Vec::new(),
@@ -92,8 +97,10 @@ impl RomFsBuilder {
                 idx
             } else {
                 // Create new directory
+                let dir_path = format!("{}/{}", self.dirs[current_dir].path, dir_name);
                 let new_idx = self.dirs.len();
                 self.dirs.push(DirEntry {
+                    path: dir_path,
                     name: dir_name,
                     entry_offset: 0,
                     children: Vec::new(),
@@ -115,8 +122,10 @@ impl RomFsBuilder {
             }
         }
 
+        let file_path = format!("{}/{}", self.dirs[current_dir].path, file_name);
         let file_idx = self.files.len();
         self.files.push(FileEntry {
+            path: file_path,
             name: file_name,
             data,
             entry_offset: 0,
@@ -170,9 +179,12 @@ impl RomFsBuilder {
                     .ok_or_else(|| FromDirectoryError::InvalidFileName { path: entry.path() })?
                     .to_string();
 
+                let entry_path = format!("{}/{}", builder.dirs[dir_idx].path, name);
+
                 if file_type.is_dir() {
                     let new_idx = builder.dirs.len();
                     builder.dirs.push(DirEntry {
+                        path: entry_path,
                         name,
                         entry_offset: 0,
                         children: Vec::new(),
@@ -189,6 +201,7 @@ impl RomFsBuilder {
 
                     let file_idx = builder.files.len();
                     builder.files.push(FileEntry {
+                        path: entry_path,
                         name,
                         data,
                         entry_offset: 0,
@@ -217,6 +230,9 @@ impl RomFsBuilder {
         if self.files.is_empty() {
             return Err(BuildError::Empty);
         }
+
+        // Put the metadata tables in path order before anything reads their layout
+        self.sort_entries_by_path();
 
         // Sort children and files by name
         for i in 0..self.dirs.len() {
@@ -302,6 +318,49 @@ impl RomFsBuilder {
         buf.extend_from_slice(&file_table);
 
         Ok(buf)
+    }
+
+    /// Order the directory and file tables by full path.
+    ///
+    /// Entry offsets, file data offsets and hash chains are all assigned by walking
+    /// these two vectors, so their order decides the image bytes. Entries arrive in
+    /// the order the filesystem hands them back, which differs between machines and
+    /// between runs; ordering by path makes the image a function of the tree alone,
+    /// and reproduces the order devkitPro's `elf2nro` emits.
+    fn sort_entries_by_path(&mut self) {
+        // Where each entry ends up. Paths are unique, so this is exactly the
+        // permutation the two `sort_by` calls below apply.
+        let mut dir_order: Vec<usize> = (0..self.dirs.len()).collect();
+        dir_order.sort_by(|&a, &b| self.dirs[a].path.cmp(&self.dirs[b].path));
+        let mut new_dir_index = vec![0usize; self.dirs.len()];
+        for (new, &old) in dir_order.iter().enumerate() {
+            new_dir_index[old] = new;
+        }
+
+        let mut file_order: Vec<usize> = (0..self.files.len()).collect();
+        file_order.sort_by(|&a, &b| self.files[a].path.cmp(&self.files[b].path));
+        let mut new_file_index = vec![0usize; self.files.len()];
+        for (new, &old) in file_order.iter().enumerate() {
+            new_file_index[old] = new;
+        }
+
+        // The root's path is empty, so it sorts first and stays at index 0.
+        self.dirs.sort_by(|a, b| a.path.cmp(&b.path));
+        self.files.sort_by(|a, b| a.path.cmp(&b.path));
+
+        // Every index the entries hold now refers to the old position.
+        for dir in &mut self.dirs {
+            dir.parent = new_dir_index[dir.parent];
+            for child in &mut dir.children {
+                *child = new_dir_index[*child];
+            }
+            for file in &mut dir.files {
+                *file = new_file_index[*file];
+            }
+        }
+        for file in &mut self.files {
+            file.parent = new_dir_index[file.parent];
+        }
     }
 
     fn calculate_offsets(&mut self) {
@@ -599,4 +658,45 @@ fn align32(value: u32, alignment: u32) -> u32 {
 fn align64(value: u64, alignment: u64) -> u64 {
     let mask = alignment - 1;
     (value + mask) & !mask
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RomFsBuilder;
+
+    #[test]
+    fn build_lays_out_entries_by_path_regardless_of_insertion_order() {
+        //* Given
+        // The same three files, registered in two different orders. Directory
+        // walks hand entries back in filesystem order, so both are orders the
+        // builder can be handed for one tree.
+        let sorted = RomFsBuilder::new()
+            .add_file("/alpha/one.txt", b"one".to_vec())
+            .expect("adding /alpha/one.txt should succeed")
+            .add_file("/alpha/two.txt", b"two".to_vec())
+            .expect("adding /alpha/two.txt should succeed")
+            .add_file("/beta/three.txt", b"three".to_vec())
+            .expect("adding /beta/three.txt should succeed");
+        let shuffled = RomFsBuilder::new()
+            .add_file("/beta/three.txt", b"three".to_vec())
+            .expect("adding /beta/three.txt should succeed")
+            .add_file("/alpha/two.txt", b"two".to_vec())
+            .expect("adding /alpha/two.txt should succeed")
+            .add_file("/alpha/one.txt", b"one".to_vec())
+            .expect("adding /alpha/one.txt should succeed");
+
+        //* When
+        let from_sorted = sorted
+            .build()
+            .expect("building the sorted image should succeed");
+        let from_shuffled = shuffled
+            .build()
+            .expect("building the shuffled image should succeed");
+
+        //* Then
+        assert_eq!(
+            from_sorted, from_shuffled,
+            "the image should depend on the tree alone, not on the order entries arrived in",
+        );
+    }
 }
