@@ -5,9 +5,9 @@
 `nx-std/nx-object` is a single Rust library crate for **Nintendo Switch file formats**: zero-copy parsing and
 generation of the executable and asset formats the console loads.
 
-The crate is **`no_std` by default and `std` on demand**. Nothing in `raw` or `read` needs an allocator or an
+The crate is **`std` by default and `no_std` on demand**. Nothing in `raw` or `read` needs an allocator or an
 operating system, so the same definitions serve host-side tooling and code running on the console; the `write`
-layer and everything that touches a filesystem sit behind the `filesystem-support` feature.
+layer sits behind `alloc`, and the handful of builders that walk a directory sit behind `std`.
 
 ## Quick Start
 
@@ -17,7 +17,7 @@ layer and everything that touches a filesystem sit behind the `filesystem-suppor
 2. **Use Skills for operations** → Invoke skills (`/code-format`, `/code-check`, `/code-test`, `/code-rules-check`, `/docs-fmt-check`, `/code-review`) instead of running commands directly.
 3. **Skills wrap justfile tasks** → Skills provide the interface to `just` commands with proper guidance.
 4. **Follow the workflow** → Format → Check → Clippy → Test → Rules check.
-5. **Mind the feature axis** → A change outside `filesystem-support` must still compile without `std` (`just check --no-default-features --target aarch64-unknown-none`).
+5. **Mind the feature axis** → A change outside a `std` gate must still compile without `std` (`just check --no-default-features --features all-formats,alloc --target aarch64-unknown-none`).
 6. **Fix ALL warnings** → Zero tolerance for clippy warnings.
 
 **Your first action**: Invoke `/code-rules` to load the rules before drafting a plan or writing any code. For commands, invoke the relevant Skill.
@@ -106,7 +106,7 @@ and `raw` depends on nothing above it.
 |---------|----------------------------------------------------------------------------------|-----------------------|
 | `raw`   | `#[repr(C)]` binary structures backed by `zerocopy`; direct field access          | Always                |
 | `read`  | Parsing wrappers that validate magic numbers and sizes, one error type per format | Always                |
-| `write` | Builders that assemble a format and return the finished image as a byte buffer    | `filesystem-support`  |
+| `write` | Builders that assemble a format and return the finished image as a byte buffer    | `alloc`               |
 | `elf`   | Derives NRO and NSO segments from a linked ELF binary                             | `elf-parsing`         |
 
 Formats covered: NRO, NSO, KIP, NACP, NPDM, RomFS, PFS0, and the MOD0 header embedded in executables. Not every
@@ -114,23 +114,32 @@ format has all three layers; see the table in `README.md`.
 
 ### Features
 
-| Feature              | Pulls in                          | Effect                                                     |
-|----------------------|-----------------------------------|------------------------------------------------------------|
-| (none, the default)  | —                                 | `no_std`; `raw` and `read` only                            |
-| `filesystem-support` | `fs-err`, `sha2`, `bit_field`     | Enables `std` and the `write` layer                        |
-| `elf-parsing`        | `object` (+ `filesystem-support`) | ELF segment derivation                                     |
-| `lz4-compression`    | `lz4_flex` (+ `filesystem-support`)| LZ4 compression of NSO segments                           |
+Two axes select what gets compiled: which formats, and how much runtime. Each feature carries a `##` doc
+comment in `Cargo.toml`, which is the authoritative description; what follows is the shape of it.
 
-`#![cfg_attr(not(feature = "filesystem-support"), no_std)]` in `src/lib.rs` is what makes the default build
-`no_std`. Code that is not behind a `filesystem-support` gate therefore may not reach for `std`, and the check
-that proves it is `just check --no-default-features --target aarch64-unknown-none`. That target stands in
-for the console's `aarch64-nintendo-switch-freestanding`, which is tier 3 and would need `-Z build-std` on
-nightly; both are 64-bit aarch64, so pointer width and alignment match what the console sees.
+| Feature                                            | Pulls in                     | Effect                                             |
+|----------------------------------------------------|------------------------------|----------------------------------------------------|
+| `default`                                          | `all-formats`, `std`         | The whole crate, for a consumer that names nothing  |
+| `all-formats`                                      | every format feature         | All eight formats at once                          |
+| `kip`, `mod0`, `nacp`, `npdm`, `nro`, `nso`, `pfs0`, `romfs` | — (`nso` adds `bitflags`, `sha2`) | One format's `raw`, `read` and `write` modules |
+| `alloc`                                            | —                            | The `write` layer, which needs a heap and no more   |
+| `std`                                              | `alloc`, `fs-err`            | The `from_directory` builders and path-carrying errors |
+| `serde`                                            | `alloc`, `serde`             | Derives on the NPDM builder's inputs               |
+| `elf-parsing`                                      | `object` (+ `std`, `nro`, `nso`) | ELF segment derivation                         |
+| `lz4-compression`                                  | `lz4_flex` (+ `alloc`, `nso`)| LZ4 compression of NSO segments                    |
+
+`#![cfg_attr(not(feature = "std"), no_std)]` in `src/lib.rs` is what makes a build without `std` `no_std`.
+Code that is not behind a `std` gate therefore may not reach for `std`, and the check that proves it is
+`just check --no-default-features --features all-formats,alloc --target aarch64-unknown-none`. That target
+stands in for the console's `aarch64-nintendo-switch-freestanding`, which is tier 3 and would need
+`-Z build-std` on nightly; both are 64-bit aarch64, so pointer width and alignment match what the console
+sees. The bare-metal configuration takes `alloc` deliberately: the builders are where a `use std::` would
+otherwise creep back in unnoticed.
 
 CI runs the two configurations as a matrix, `check (std)` and `check (no-std)`, invoking the same `just`
 recipes with the flags each configuration needs. The recipes take the flags rather than baking them in, so
-there is one definition of each check and no way for local and CI to drift apart. `test` and `format` are
-separate jobs.
+there is one definition of each check and no way for local and CI to drift apart. `test`,
+`check-unused-deps` and `format` are separate jobs.
 
 
 ## 4. Build System
@@ -147,9 +156,10 @@ A plain Cargo package driven by `just` recipes.
 ### Build
 
 ```
-cargo build                    # default features: no_std
-cargo build --all-features     # every layer
-cargo build --no-default-features   # explicit no_std build
+cargo build                    # default: every format, plus std
+cargo build --all-features     # every layer and every format
+cargo build --no-default-features --features all-formats,alloc   # no_std, with the builders
+cargo build --no-default-features --features nro                 # one format, no allocator
 ```
 
 Standard cargo — there is no extra build orchestration.
