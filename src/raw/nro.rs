@@ -29,7 +29,7 @@ pub const ASSET_MAGIC: u32 = 0x54455341;
 /// The three segments of an NRO appear in [`NroHeader::segments`] in load order: `text`, `rodata`, `data`.
 /// Each is mapped with its own permissions, so a segment's bounds decide which pages are executable.
 ///
-/// See <https://switchbrew.org/wiki/NRO#Segments>.
+/// See <https://switchbrew.org/wiki/NRO#NroHeader>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NroSegment {
@@ -39,7 +39,7 @@ pub struct NroSegment {
     pub size: U32,
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NRO#Segments
+// Verify struct size - https://switchbrew.org/wiki/NRO#NroHeader
 const_assert_eq!(size_of::<NroSegment>(), 0x8);
 const_assert_eq!(align_of::<NroSegment>(), 0x1);
 
@@ -49,7 +49,7 @@ const_assert_eq!(align_of::<NroSegment>(), 0x1);
 /// A homebrew NRO puts its crt0 branch here; preserving those bytes is what keeps an NRO
 /// launchable after a rewrite.
 ///
-/// See <https://switchbrew.org/wiki/NRO#Start>.
+/// See <https://switchbrew.org/wiki/NRO#RocrtHeader>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NroStart {
@@ -63,7 +63,7 @@ pub struct NroStart {
     _padding: [u8; 8],
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NRO#Start
+// Verify struct size - https://switchbrew.org/wiki/NRO#RocrtHeader
 const_assert_eq!(size_of::<NroStart>(), 0x10);
 const_assert_eq!(align_of::<NroStart>(), 0x1);
 
@@ -71,7 +71,7 @@ const_assert_eq!(align_of::<NroStart>(), 0x1);
 ///
 /// Sits at offset `0x10`, immediately after [`NroStart`].
 ///
-/// See <https://switchbrew.org/wiki/NRO#Header>.
+/// See <https://switchbrew.org/wiki/NRO#NroHeader>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NroHeader {
@@ -101,7 +101,7 @@ pub struct NroHeader {
     _reserved2: [u8; 0x20],
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NRO#Header
+// Verify struct size - https://switchbrew.org/wiki/NRO#NroHeader
 const_assert_eq!(size_of::<NroHeader>(), 0x70);
 const_assert_eq!(align_of::<NroHeader>(), 0x1);
 

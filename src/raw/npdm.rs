@@ -76,7 +76,7 @@ const_assert_eq!(align_of::<NpdmHeader>(), 0x1);
 /// signature is what makes that binding. ACI0 then requests some subset of it, and the loader
 /// rejects a program asking for more than its ACID allows.
 ///
-/// See <https://switchbrew.org/wiki/NPDM#ACID>.
+/// See <https://switchbrew.org/wiki/NPDM#Acid>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct AcidHeader {
@@ -112,7 +112,7 @@ pub struct AcidHeader {
     _reserved_238: U64,
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NPDM#ACID
+// Verify struct size - https://switchbrew.org/wiki/NPDM#Acid
 const_assert_eq!(size_of::<AcidHeader>(), 0x240);
 const_assert_eq!(align_of::<AcidHeader>(), 0x1);
 
@@ -122,7 +122,7 @@ const_assert_eq!(align_of::<AcidHeader>(), 0x1);
 /// is checked against it at load, so nothing here grants anything the descriptor did not already
 /// allow. Its blocks are laid out identically, which is what lets the loader compare them directly.
 ///
-/// See <https://switchbrew.org/wiki/NPDM#ACI0>.
+/// See <https://switchbrew.org/wiki/NPDM#Aci>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct Aci0Header {
@@ -147,6 +147,6 @@ pub struct Aci0Header {
     _reserved_38: U64,
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NPDM#ACI0
+// Verify struct size - https://switchbrew.org/wiki/NPDM#Aci
 const_assert_eq!(size_of::<Aci0Header>(), 0x40);
 const_assert_eq!(align_of::<Aci0Header>(), 0x1);

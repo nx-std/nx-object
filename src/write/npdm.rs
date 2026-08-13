@@ -32,7 +32,7 @@ pub struct MapRegionDescriptor {
 /// format defined by the Nintendo Switch kernel. The encoding includes a trailing
 /// bit pattern that identifies the capability type.
 ///
-/// See: <https://switchbrew.org/wiki/NPDM#Kernel_Capability_Descriptors>
+/// See: <https://switchbrew.org/wiki/NPDM#KernelCapability>
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(

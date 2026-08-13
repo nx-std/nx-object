@@ -23,7 +23,7 @@ pub const MOD0_MAGIC: u32 = 0x30444f4d;
 ///
 /// [`NroStart::mod_offset`]: crate::raw::nro::NroStart::mod_offset
 ///
-/// See <https://switchbrew.org/wiki/NRO#MOD>.
+/// See <https://switchbrew.org/wiki/MOD#ModuleHeader>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct Mod0Header {
@@ -45,6 +45,6 @@ pub struct Mod0Header {
     pub module_object_offset: I32,
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NRO#MOD
+// Verify struct size - https://switchbrew.org/wiki/MOD#ModuleHeader
 const_assert_eq!(size_of::<Mod0Header>(), 0x1C);
 const_assert_eq!(align_of::<Mod0Header>(), 0x1);
