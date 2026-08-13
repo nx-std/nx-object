@@ -10,7 +10,7 @@
 
 use zerocopy::FromBytes;
 
-use crate::raw::romfs::{RomFsDirEntry, RomFsFileEntry, RomFsHeader};
+use crate::raw::romfs::{NO_ENTRY, RomFsDirEntry, RomFsFileEntry, RomFsHeader};
 
 /// A borrowed view of a RomFS image, with its four tables proven to lie inside the buffer.
 ///
@@ -331,7 +331,7 @@ impl<'a> RomFsDir<'a> {
         let mut child_offset = self.entry.child_offset.get();
         let table_base = self.romfs.header.dir_meta_table_offset.get() as usize;
 
-        while child_offset != u32::MAX {
+        while child_offset != NO_ENTRY {
             let child = RomFsDir::from_offset(self.romfs, child_offset, table_base)?;
             if child.name() == name {
                 return Ok(child);
@@ -347,7 +347,7 @@ impl<'a> RomFsDir<'a> {
         let mut file_offset = self.entry.file_offset.get();
         let table_base = self.romfs.header.file_meta_table_offset.get() as usize;
 
-        while file_offset != u32::MAX {
+        while file_offset != NO_ENTRY {
             let file = RomFsFile::from_offset(self.romfs, file_offset, table_base)?;
             if file.name() == name {
                 return Ok(file);
@@ -512,7 +512,7 @@ impl<'a> Iterator for DirIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         // First iterate through directories
-        if self.next_dir_offset != u32::MAX
+        if self.next_dir_offset != NO_ENTRY
             && let Ok(dir) =
                 RomFsDir::from_offset(self.romfs, self.next_dir_offset, self.dir_table_base)
         {
@@ -521,7 +521,7 @@ impl<'a> Iterator for DirIterator<'a> {
         }
 
         // Then iterate through files
-        if self.next_file_offset != u32::MAX
+        if self.next_file_offset != NO_ENTRY
             && let Ok(file) =
                 RomFsFile::from_offset(self.romfs, self.next_file_offset, self.file_table_base)
         {
