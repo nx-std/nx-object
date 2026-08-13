@@ -49,10 +49,14 @@ nx-object = { git = "https://github.com/nx-std/nx-object" }
 ## Development
 
 ```bash
-just check          # cargo check --all-targets
-just check-no-std   # cargo check --no-default-features --target aarch64-unknown-none
-just test           # cargo nextest run (falls back to cargo test)
-just fmt            # cargo +nightly fmt --all
+just check --all-targets --all-features   # compile check
+just clippy --all-targets --all-features  # lint
+just test --all-features                  # cargo nextest run (falls back to cargo test)
+just fmt                                  # cargo +nightly fmt --all
+
+# The no_std half, the way CI builds it
+just check --no-default-features --target aarch64-unknown-none
+just clippy --no-default-features --target aarch64-unknown-none
 ```
 
 ## References
