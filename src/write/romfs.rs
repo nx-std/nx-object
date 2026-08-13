@@ -29,7 +29,14 @@ struct FileEntry {
     parent: usize,
 }
 
-/// Builder for constructing RomFS images.
+/// Accumulates files and lays them out as a RomFS image.
+///
+/// Intermediate directories are created as files are added, so only files are ever registered; a
+/// directory nothing is stored under does not survive into the image. The builder takes and returns
+/// ownership at each step, which is what lets a rejected file leave no half-added state behind.
+///
+/// Insertion order does not reach the image. Entries are sorted by path when it is built, so the
+/// same set of files always produces the same bytes.
 pub struct RomFsBuilder {
     dirs: Vec<DirEntry>,
     files: Vec<FileEntry>,
@@ -38,7 +45,7 @@ pub struct RomFsBuilder {
 }
 
 impl RomFsBuilder {
-    /// Create a new RomFS builder.
+    /// Start an image holding nothing but its root directory.
     pub fn new() -> Self {
         // Initialize with root directory
         Self {
@@ -56,9 +63,15 @@ impl RomFsBuilder {
         }
     }
 
-    /// Add a file to the RomFS image.
+    /// Store `data` at `path`, creating whatever directories the path implies.
     ///
-    /// The path should start with `/` and use `/` as the separator.
+    /// `path` is absolute and slash-separated, as in `/config/settings.json`.
+    ///
+    /// # Errors
+    ///
+    /// Fails when `path` is not absolute, names nothing after its separators, or has already been
+    /// added. A failure returns the file rather than the builder, so nothing partial is left
+    /// behind: the directories the path would have created are not registered either.
     pub fn add_file(
         mut self,
         path: impl Into<String>,
@@ -579,13 +592,19 @@ pub enum BuildError {
     /// because it is not absolute or contains an empty component. Holds the
     /// offending path.
     #[error("invalid path: {path}")]
-    InvalidPath { path: String },
+    InvalidPath {
+        /// The path that cannot be represented in the tree.
+        path: String,
+    },
     /// Two entries resolve to the same path.
     ///
     /// Raised when a file or directory is added more than once. Holds the
     /// duplicated path.
     #[error("duplicate entry: {path}")]
-    DuplicateEntry { path: String },
+    DuplicateEntry {
+        /// The path that was added more than once.
+        path: String,
+    },
 }
 
 /// Error returned by [`RomFsBuilder::from_directory`].
@@ -600,6 +619,7 @@ pub enum FromDirectoryError {
     Io {
         /// Path that was being read when the I/O error occurred.
         path: PathBuf,
+        /// The failure the filesystem reported.
         #[source]
         source: std::io::Error,
     },
@@ -608,13 +628,19 @@ pub enum FromDirectoryError {
     /// RomFS has no representation for symlinks, so they cannot be packed. Holds
     /// the path of the symlink.
     #[error("symlinks not supported: {}", path.display())]
-    Symlink { path: PathBuf },
+    Symlink {
+        /// The symlink that cannot be packed.
+        path: PathBuf,
+    },
     /// A file or directory name is not valid UTF-8.
     ///
     /// RomFS stores names as UTF-8; an entry whose name cannot be decoded is
     /// rejected. Holds the offending path.
     #[error("invalid file name: {}", path.display())]
-    InvalidFileName { path: PathBuf },
+    InvalidFileName {
+        /// The path whose name could not be decoded as UTF-8.
+        path: PathBuf,
+    },
 }
 
 /// Calculate hash table size using pseudo-prime algorithm.

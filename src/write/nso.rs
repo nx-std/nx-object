@@ -9,7 +9,11 @@ use crate::raw::{
     nso::{NSO_MAGIC, NsoFlags, NsoHeader, NsoSegmentHeader},
 };
 
-/// Builder for constructing NSO files.
+/// Assembles the three segments, their hashes, and a header into an NSO image.
+///
+/// Segments are hashed before they are compressed, because the header's digests cover the
+/// decompressed bytes; setting a segment after the image is built has no effect on one already
+/// returned.
 pub struct NsoBuilder {
     text: Option<Vec<u8>>,
     text_vaddr: u32,
@@ -24,12 +28,11 @@ pub struct NsoBuilder {
 }
 
 impl NsoBuilder {
-    /// Create a new NSO builder.
+    /// Start an image with no segments, no module ID, and no BSS.
     ///
-    /// Compression is enabled by default when the `lz4` feature is active.
-    /// Virtual addresses default to 0 for text, and will be computed as
-    /// relative offsets if not explicitly set via `text_vaddr`, `rodata_vaddr`,
-    /// or `data_vaddr`.
+    /// Compression is on when `lz4-compression` is enabled, since an NSO is normally stored
+    /// compressed. Every virtual address defaults to `0`, and a segment whose address is left
+    /// unset is laid out at its offset within the image.
     pub fn new() -> Self {
         Self {
             text: None,
@@ -45,76 +48,76 @@ impl NsoBuilder {
         }
     }
 
-    /// Set the text (code) segment.
+    /// Supply the executable code the loader maps.
     pub fn text(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.text = Some(data.into());
         self
     }
 
-    /// Set the text segment virtual address.
+    /// Place the `text` segment at `vaddr` in the mapped image, as the linker laid it out.
     ///
-    /// This corresponds to the ELF `p_vaddr` field for the text segment.
-    /// If not set, defaults to 0.
+    /// Taken from the segment's `p_vaddr` when the image comes from an ELF. Left at `0` unless
+    /// set, which puts the segment at the image base.
     pub fn text_vaddr(mut self, vaddr: u32) -> Self {
         self.text_vaddr = vaddr;
         self
     }
 
-    /// Set the rodata (read-only data) segment.
+    /// Supply the constants and linking tables the loader maps read-only.
     pub fn rodata(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.rodata = Some(data.into());
         self
     }
 
-    /// Set the rodata segment virtual address.
+    /// Place the `rodata` segment at `vaddr` in the mapped image, as the linker laid it out.
     ///
-    /// This corresponds to the ELF `p_vaddr` field for the rodata segment.
-    /// If not set, defaults to 0.
+    /// Taken from the segment's `p_vaddr` when the image comes from an ELF.
     pub fn rodata_vaddr(mut self, vaddr: u32) -> Self {
         self.rodata_vaddr = vaddr;
         self
     }
 
-    /// Set the data (read-write data) segment.
+    /// Supply the writable initialized data the loader maps.
     pub fn data(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.data = Some(data.into());
         self
     }
 
-    /// Set the data segment virtual address.
+    /// Place the `data` segment at `vaddr` in the mapped image, as the linker laid it out.
     ///
-    /// This corresponds to the ELF `p_vaddr` field for the data segment.
-    /// If not set, defaults to 0.
+    /// Taken from the segment's `p_vaddr` when the image comes from an ELF.
     pub fn data_vaddr(mut self, vaddr: u32) -> Self {
         self.data_vaddr = vaddr;
         self
     }
 
-    /// Set the BSS section size in bytes.
+    /// Ask the loader to reserve and zero `size` bytes after the `data` segment.
+    ///
+    /// The bytes are not stored in the image, so this costs nothing in the file.
     pub fn bss_size(mut self, size: u32) -> Self {
         self.bss_size = size;
         self
     }
 
-    /// Set the 32-byte module ID (build ID).
+    /// Record the identity of the build this image was linked from.
     ///
-    /// If not provided, will default to all zeros.
+    /// Left zeroed unless set, which produces an image a crash report cannot be traced back to.
     pub fn module_id(mut self, id: BuildId) -> Self {
         self.module_id = Some(id);
         self
     }
 
-    /// Enable or disable LZ4 compression of segments.
+    /// Choose whether the segments are stored compressed.
     ///
-    /// Compression is enabled by default when the `lz4` feature is active.
-    /// This method is only available when the `lz4` feature is enabled.
+    /// On by default. Turning it off produces a larger image that the loader still accepts, since
+    /// each segment's compression bit is written to match.
     #[cfg(feature = "lz4-compression")]
     pub fn compressed(mut self, compress: bool) -> Self {
         self.compress = compress;
         self
     }
 
-    /// Build the complete NSO file.
+    /// Lay out the segments, hash them, compress them, and return the finished image.
     ///
     /// # Errors
     ///

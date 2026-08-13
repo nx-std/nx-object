@@ -16,25 +16,27 @@ use zerocopy::{
     little_endian::{U32, U64},
 };
 
-/// PFS0 magic number: "PFS0" in ASCII (0x30534650).
+/// Magic identifying a PFS0 header: `PFS0`, little-endian, at offset zero.
 pub const PFS0_MAGIC: u32 = 0x30534650;
 
-/// PFS0 header (0x10 bytes) describing the filesystem structure.
+/// The counts that fix where every later region of the archive begins.
 ///
-/// Contains file count, string table size, and reserved fields.
-/// The header is followed by file entry table, string table, and file data.
+/// Nothing in a PFS0 records an absolute offset for its regions: the entry table starts right after
+/// this header, and the string table and data region follow at distances derived from `file_count`
+/// and `string_table_size`. Both fields are therefore load-bearing, and a wrong one shifts every
+/// file in the archive.
 ///
-/// See: <https://switchbrew.org/wiki/PFS0>
+/// See <https://switchbrew.org/wiki/PFS0#Header>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct Pfs0Header {
-    /// Magic number (must be [`PFS0_MAGIC`])
+    /// Always [`PFS0_MAGIC`]; anything else means this is not a PFS0.
     pub magic: U32,
-    /// Number of file entries
+    /// Number of entries in the file table that follows this header.
     pub file_count: U32,
-    /// Size of string table in bytes
+    /// Length of the string table in bytes, including the padding to a `0x20`-byte boundary.
     pub string_table_size: U32,
-    /// Reserved (zero)
+    /// Unused by the format; zero in every archive this crate writes.
     pub _reserved: U32,
 }
 
@@ -42,20 +44,25 @@ pub struct Pfs0Header {
 const_assert_eq!(size_of::<Pfs0Header>(), 0x10);
 const_assert_eq!(align_of::<Pfs0Header>(), 0x1);
 
-/// PFS0 file entry (0x18 bytes).
+/// One file in the archive: where its bytes are, how many there are, and where its name is.
 ///
-/// File entries are stored in a table immediately following the PFS0 header.
-/// Each entry describes a file's location, size, and name location in the string table.
+/// Entries sit in a table immediately after [`Pfs0Header`], in the same order as the files in the
+/// data region. Neither offset is absolute, and the two are measured from different origins.
+///
+/// See <https://switchbrew.org/wiki/PFS0#File_Entry>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct Pfs0FileEntry {
-    /// Offset to file data (relative to file data region start)
+    /// Offset of the file's first byte, from the start of the data region.
     pub offset: U64,
-    /// Size of file data in bytes
+    /// Length of the file in bytes.
     pub size: U64,
-    /// Offset to filename in string table
+    /// Offset of the file's name, from the start of the string table.
+    ///
+    /// The name is NUL-terminated and its length is recorded nowhere, so reading it means
+    /// scanning to the terminator.
     pub string_table_offset: U32,
-    /// Reserved (normally zero)
+    /// Unused by the format; zero in every archive this crate writes.
     pub _reserved: U32,
 }
 

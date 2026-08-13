@@ -13,39 +13,48 @@ use bitflags::bitflags;
 use static_assertions::const_assert_eq;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, little_endian::U32};
 
-/// NSO magic number: "NSO0" in ASCII (0x304f534e).
+/// Magic identifying an NSO header: `NSO0`, little-endian, at offset zero.
 pub const NSO_MAGIC: u32 = 0x304f534e;
 
 bitflags! {
-    /// NSO header flags indicating compression and hash validation.
+    /// Which segments are LZ4-compressed in the file, and which the loader hash-checks on load.
+    ///
+    /// The two halves are independent: a segment can be stored compressed without being verified,
+    /// and verified without being compressed. A compression bit is what decides whether a segment's
+    /// bytes in the file are its contents or its compressed form, so clearing one without
+    /// rewriting the segment leaves an image the loader reads as garbage.
     #[derive(Debug, Clone, Copy)]
     pub struct NsoFlags: u32 {
-        /// Text segment is compressed
+        /// The `text` segment is stored LZ4-compressed.
         const TEXT_COMPRESS = 1 << 0;
-        /// Rodata segment is compressed
+        /// The `rodata` segment is stored LZ4-compressed.
         const RODATA_COMPRESS = 1 << 1;
-        /// Data segment is compressed
+        /// The `data` segment is stored LZ4-compressed.
         const DATA_COMPRESS = 1 << 2;
-        /// Text segment hash should be checked
+        /// The loader checks `text` against [`NsoHeader::text_hash`] before mapping it.
         const TEXT_HASH = 1 << 3;
-        /// Rodata segment hash should be checked
+        /// The loader checks `rodata` against [`NsoHeader::rodata_hash`] before mapping it.
         const RODATA_HASH = 1 << 4;
-        /// Data segment hash should be checked
+        /// The loader checks `data` against [`NsoHeader::data_hash`] before mapping it.
         const DATA_HASH = 1 << 5;
     }
 }
 
-/// NSO segment header for text, rodata, or data segments.
+/// Where one segment sits in the file, where it lands in memory, and how large it is once expanded.
 ///
-/// Contains file offset, memory offset, and decompressed size.
+/// See <https://switchbrew.org/wiki/NSO#Segment_Header>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NsoSegmentHeader {
-    /// Offset to segment data within NSO file
+    /// Offset of the segment's first stored byte, from the start of the file.
     pub file_offset: U32,
-    /// Offset where segment should be loaded in memory
+    /// Offset the segment is mapped at, from the start of the image.
     pub memory_offset: U32,
-    /// Size of segment after decompression
+    /// Length of the segment after decompression, in bytes.
+    ///
+    /// This is the mapped length, not the stored one. What the segment occupies in the file is
+    /// the matching `*_file_size` field of [`NsoHeader`], and the two differ whenever the
+    /// segment's compression bit in [`NsoFlags`] is set.
     pub size: U32,
 }
 
@@ -53,62 +62,60 @@ pub struct NsoSegmentHeader {
 const_assert_eq!(size_of::<NsoSegmentHeader>(), 0xC);
 const_assert_eq!(align_of::<NsoSegmentHeader>(), 0x1);
 
-/// NSO header (0x100 bytes) - official software module format.
+/// Everything the loader needs to map an NSO: its segments, their stored lengths, and their hashes.
 ///
-/// NSO files contain compressed and hashed segments of executable code.
-/// Used for official system modules and game code.
+/// Occupies the first `0x100` bytes of the file. Unlike an NRO, an NSO opens with its magic rather
+/// than with code, and its segments may be compressed and verified individually.
 ///
-/// See: <https://switchbrew.org/wiki/NSO>
+/// See <https://switchbrew.org/wiki/NSO#Header>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NsoHeader {
-    /// Magic number (must be `NSO_MAGIC`)
+    /// Always [`NSO_MAGIC`]; anything else means this is not an NSO.
     pub magic: U32,
-    /// Format version
+    /// Format revision. Every NSO this crate reads or writes carries `0`.
     pub version: U32,
-    /// Reserved
     _reserved: U32,
-    /// Flags (compression and hash validation)
+    /// The [`NsoFlags`] bits deciding which segments are compressed and which are hash-checked.
     pub flags: U32,
-    /// Text segment header
+    /// Bounds of the `text` segment, holding executable code.
     pub text: NsoSegmentHeader,
-    /// Offset to module name string
+    /// Offset of the module name string, from the start of the file.
     pub module_name_offset: U32,
-    /// Rodata segment header
+    /// Bounds of the `rodata` segment, holding constants and the dynamic linking tables.
     pub rodata: NsoSegmentHeader,
-    /// Length of module name string
+    /// Length of the module name string in bytes.
     pub module_name_size: U32,
-    /// Data segment header
+    /// Bounds of the `data` segment, holding writable initialized data.
     pub data: NsoSegmentHeader,
-    /// BSS section size in bytes
+    /// Length of the zero-initialized region the loader appends after `data`, in bytes.
     pub bss_size: U32,
-    /// 32-byte module ID (build ID)
+    /// Identity of the linked binary, taken from the ELF build ID and zero-padded to `0x20` bytes.
     pub module_id: [u8; 0x20],
-    /// Compressed text segment size in file
+    /// Bytes the `text` segment occupies in the file, compressed if `TEXT_COMPRESS` is set.
     pub text_file_size: U32,
-    /// Compressed rodata segment size in file
+    /// Bytes the `rodata` segment occupies in the file, compressed if `RODATA_COMPRESS` is set.
     pub rodata_file_size: U32,
-    /// Compressed data segment size in file
+    /// Bytes the `data` segment occupies in the file, compressed if `DATA_COMPRESS` is set.
     pub data_file_size: U32,
-    /// Reserved
     _reserved2: [u8; 0x1C],
-    /// Offset to embedded data (relative to rodata)
+    /// Offset of the embedded data blob, from the start of the `rodata` segment.
     pub embedded_offset: U32,
-    /// Size of embedded data
+    /// Length of the embedded data blob in bytes.
     pub embedded_size: U32,
-    /// Offset to .dynstr section (relative to rodata)
+    /// Offset of the `.dynstr` table, from the start of the `rodata` segment.
     pub dynstr_offset: U32,
-    /// Size of .dynstr section
+    /// Length of the `.dynstr` table in bytes.
     pub dynstr_size: U32,
-    /// Offset to .dynsym section (relative to rodata)
+    /// Offset of the `.dynsym` table, from the start of the `rodata` segment.
     pub dynsym_offset: U32,
-    /// Size of .dynsym section
+    /// Length of the `.dynsym` table in bytes.
     pub dynsym_size: U32,
-    /// SHA256 hash of decompressed text segment
+    /// SHA-256 of the `text` segment, taken over its decompressed bytes.
     pub text_hash: [u8; 0x20],
-    /// SHA256 hash of decompressed rodata segment
+    /// SHA-256 of the `rodata` segment, taken over its decompressed bytes.
     pub rodata_hash: [u8; 0x20],
-    /// SHA256 hash of decompressed data segment
+    /// SHA-256 of the `data` segment, taken over its decompressed bytes.
     pub data_hash: [u8; 0x20],
 }
 

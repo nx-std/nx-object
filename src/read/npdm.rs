@@ -14,7 +14,10 @@ use zerocopy::FromBytes;
 
 use crate::raw::npdm::{ACI0_MAGIC, ACID_MAGIC, Aci0Header, AcidHeader, META_MAGIC, NpdmHeader};
 
-/// High-level NPDM parser with access to META, ACID, and ACI0 sections.
+/// A borrowed view of an NPDM, with its three sections located and their magics checked.
+///
+/// The blocks nested inside ACID and ACI0 are not checked at construction, so the accessors
+/// reaching them are fallible while the ones reading the headers are not.
 pub struct Npdm<'a> {
     bytes: &'a [u8],
     header: &'a NpdmHeader,
@@ -122,12 +125,12 @@ impl<'a> Npdm<'a> {
         })
     }
 
-    /// Get the META header
+    /// The root header, fixing how the process is created.
     pub fn header(&self) -> &NpdmHeader {
         self.header
     }
 
-    /// Get program name (null-terminated UTF-8)
+    /// The program name, up to the first NUL, empty when it is not valid UTF-8.
     pub fn name(&self) -> &str {
         let len = self
             .header
@@ -138,22 +141,22 @@ impl<'a> Npdm<'a> {
         core::str::from_utf8(&self.header.name[..len]).unwrap_or("")
     }
 
-    /// Get main thread priority (0-63)
+    /// Priority the main thread starts at, from `0` to `63`, lower being more favourable.
     pub fn main_thread_priority(&self) -> u8 {
         self.header.main_thread_priority
     }
 
-    /// Get main thread stack size
+    /// Stack reserved for the main thread, in bytes.
     pub fn main_thread_stack_size(&self) -> u32 {
         self.header.main_thread_stack_size.get()
     }
 
-    /// Get the ACID header
+    /// The signed descriptor stating the maximum this program may be granted.
     pub fn acid(&self) -> &AcidHeader {
         self.acid
     }
 
-    /// Get allowed program ID range (min, max)
+    /// The inclusive range of program IDs the descriptor may be applied to, as `(min, max)`.
     pub fn program_id_range(&self) -> (u64, u64) {
         (
             self.acid.program_id_min.get(),
@@ -161,17 +164,17 @@ impl<'a> Npdm<'a> {
         )
     }
 
-    /// Get the ACI0 header
+    /// The unsigned section stating what this program actually requests.
     pub fn aci0(&self) -> &Aci0Header {
         self.aci0
     }
 
-    /// Get program ID
+    /// Title ID the process runs as, which the loader checks against the ACID's range.
     pub fn program_id(&self) -> u64 {
         self.aci0.program_id.get()
     }
 
-    /// Get ACI0 Filesystem Access Control raw data
+    /// The filesystem permissions the program requests, undecoded.
     ///
     /// # Errors
     ///
@@ -206,7 +209,7 @@ impl<'a> Npdm<'a> {
         Ok(&self.bytes[start..end])
     }
 
-    /// Get ACI0 Service Access Control raw data
+    /// The services the program requests access to, undecoded.
     ///
     /// # Errors
     ///
@@ -241,7 +244,7 @@ impl<'a> Npdm<'a> {
         Ok(&self.bytes[start..end])
     }
 
-    /// Get ACI0 Kernel Capability raw data
+    /// The kernel capabilities the program requests, undecoded.
     ///
     /// # Errors
     ///
