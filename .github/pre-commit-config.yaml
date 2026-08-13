@@ -5,24 +5,24 @@ repos:
 - repo: local
   hooks:
   ## Rust hooks
-  - id: fmt-rs
-    name: fmt-rs
+  - id: fmt
+    name: fmt
     language: system
-    entry: just fmt-rs
+    entry: just fmt
     types_or: [rust, cargo, cargo-lock]
     stages: [pre-commit, pre-merge-commit, manual]
     pass_filenames: false
-  - id: fmt-rs-check
-    name: fmt-rs-check
+  - id: fmt-check
+    name: fmt-check
     language: system
-    entry: just fmt-rs-check
+    entry: just fmt-check
     types_or: [rust, cargo, cargo-lock]
     stages: [pre-push, manual]
     pass_filenames: false
-  - id: check-rs
-    name: check-rs
+  - id: check
+    name: check
     language: system
-    entry: just check-rs
+    entry: just check
     types_or: [rust, cargo, cargo-lock]
     stages: [pre-push, manual]
     pass_filenames: false

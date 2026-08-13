@@ -1,7 +1,7 @@
 ---
 name: code-check
 description: Validate and lint Rust code after changes in the nx-std/nx-object crate. Use after editing .rs files, when user mentions compilation errors, type checking, linting, clippy warnings, or before commits/PRs. Prefers IDE/rust-analyzer diagnostics when available, defaults to `just` commands, and auto-fixes clippy lints with `--fix`.
-allowed-tools: "Bash(just check:*), Bash(just check-rs:*), Bash(just clippy:*), Bash(just check-unused-deps:*), Bash(just check-deps:*), mcp__ide__getDiagnostics, LSP"
+allowed-tools: "Bash(just check:*), Bash(just clippy:*), Bash(just check-unused-deps:*), mcp__ide__getDiagnostics, LSP"
 ---
 
 # Code Checking Skill
@@ -23,7 +23,7 @@ Run the stages in order. Move to the next stage only after the current one is cl
 
 ```
 Stage 0 (optional)                   Stage 1 — mandatory        Stage 2 — mandatory
-rust-analyzer-lsp diagnostics   →    just check-rs <flags> →    just clippy <flags> --fix …
+rust-analyzer-lsp diagnostics   →    just check <flags> →    just clippy <flags> --fix …
 (via mcp__ide__getDiagnostics)       once per configuration     once per configuration
 ```
 
@@ -67,13 +67,13 @@ Stage 0 reads diagnostics rust-analyzer has already computed in the background. 
 
 ### Check Rust Code
 ```bash
-just check-rs [EXTRA_FLAGS]
+just check [EXTRA_FLAGS]
 ```
-Runs `cargo check` with whatever flags you pass. **Default Stage 1 command.** **Alias:** `just check`.
+Runs `cargo check` with whatever flags you pass. **Default Stage 1 command.**
 
 Examples:
-- `just check-rs --all-targets --all-features` — the `std` configuration
-- `just check-rs --no-default-features --target aarch64-unknown-none` — the `no-std` configuration
+- `just check --all-targets --all-features` — the `std` configuration
+- `just check --no-default-features --target aarch64-unknown-none` — the `no-std` configuration
 
 ### Lint Rust Code with Auto-fix
 ```bash
@@ -108,7 +108,7 @@ Edits in `src/write/...`, which is behind `filesystem-support`.
 
 1. Format changes: use `/code-format`.
 2. **Stage 0** — probe `mcp__ide__getDiagnostics`. If available, call with each edited file's `file://` URI. Fix reported issues.
-3. **Stage 1** — `just check-rs --all-targets --all-features` → fix errors → repeat until clean.
+3. **Stage 1** — `just check --all-targets --all-features` → fix errors → repeat until clean.
 4. **Stage 2** — `just clippy --all-targets --all-features --fix --allow-dirty --allow-staged`
    - If warnings remain: re-run without `--fix`, hand-fix the residue.
 5. Re-run `/code-format` if `--fix` changed source.
@@ -120,8 +120,8 @@ Edits in `src/raw/...`, which compiles in every configuration.
 1. Format changes: use `/code-format`.
 2. **Stage 0** — probe `mcp__ide__getDiagnostics`; fix surfaced issues.
 3. **Stage 1** — run both configurations → fix errors → repeat until both are clean:
-   - `just check-rs --all-targets --all-features`
-   - `just check-rs --no-default-features --target aarch64-unknown-none`
+   - `just check --all-targets --all-features`
+   - `just check --no-default-features --target aarch64-unknown-none`
 4. **Stage 2** — `just clippy --all-targets --all-features --fix --allow-dirty --allow-staged`, hand-fix the
    residue, then lint the other configuration:
    `just clippy --no-default-features --target aarch64-unknown-none`
@@ -131,7 +131,7 @@ Edits in `src/raw/...`, which compiles in every configuration.
 ## Common Mistakes to Avoid
 
 ### Anti-patterns
-- **Never run `cargo check` or `cargo clippy` directly** — go through `just check-rs` / `just clippy`, so the command a developer runs and the command CI runs stay the same one.
+- **Never run `cargo check` or `cargo clippy` directly** — go through `just check` / `just clippy`, so the command a developer runs and the command CI runs stay the same one.
 - **Never pass `--all-targets` to the `no-std` configuration** — the test and bench targets cannot build on a bare-metal target.
 - **Never assume the `std` check covers `no_std`** — it compiles for the host, where `std` is available to every dependency.
 - **Never skip Stage 1 just because Stage 0 is clean** — rust-analyzer may be stale.
@@ -151,8 +151,8 @@ Edits in `src/raw/...`, which compiles in every configuration.
 These commands can run without user permission:
 - `mcp__ide__getDiagnostics` — read-only.
 - `LSP` tool operations against `.rs` files — read-only.
-- `just check-rs` (alias `just check`) in either configuration — safe, read-only.
-- `just check-unused-deps` (alias `just check-deps`) — runs `cargo machete`; read-only.
+- `just check` in either configuration — safe, read-only.
+- `just check-unused-deps` — runs `cargo machete`; read-only.
 - `just clippy` in either configuration — safe, read-only.
 - `just clippy --fix --allow-dirty --allow-staged` — auto-apply of machine-applicable fixes; affects only source files already being edited.
 

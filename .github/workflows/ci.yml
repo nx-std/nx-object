@@ -53,8 +53,8 @@ jobs:
       - name: Setup just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
 
-      - name: check-rs
-        run: just check-rs ${{ matrix.flags }}
+      - name: check
+        run: just check ${{ matrix.flags }}
 
       - name: clippy
         run: just clippy ${{ matrix.flags }} -- -D warnings --force-warn deprecated --force-warn dead-code
@@ -90,7 +90,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # `just fmt-rs-check` invokes `cargo +nightly fmt`, which resolves the
+      # `just fmt-check` invokes `cargo +nightly fmt`, which resolves the
       # `nightly` channel rather than the pin in rust-toolchain.toml, so rustfmt
       # has to be installed on that channel and not on the pinned one.
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
@@ -103,5 +103,5 @@ jobs:
       - name: Setup just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
 
-      - name: fmt-rs-check
-        run: just fmt-rs-check
+      - name: fmt-check
+        run: just fmt-check
