@@ -25,7 +25,7 @@ The repository holds a single crate, so scope is a question of features and of w
 | Behavior change ready to land                           | `just test --all-features`                  |
 | Feature gate, `Cargo.toml`, or dependency change        | `just test --all-features`                  |
 
-Most of the test suite lives behind `filesystem-support`, so a run without `--all-features` exercises very little. Use the narrow forms to iterate, and finish with `--all-features`.
+Most of the test suite lives behind `alloc` and `std`, so a run without `--all-features` exercises very little. Use the narrow forms to iterate, and finish with `--all-features`.
 
 ## Available Commands
 

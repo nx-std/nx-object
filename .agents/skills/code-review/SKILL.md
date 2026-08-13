@@ -69,8 +69,8 @@ Verify backwards compatibility is maintained:
 - Public API: existing functions, types, and trait signatures must not break consumers
 - Cargo `[features]`: removing or renaming a feature breaks consumers, and moving an item behind a gate is the
   same break in a quieter form
-- `no_std` support: an item that was reachable without `filesystem-support` must stay reachable, and nothing
-  ungated may start requiring `std`
+- `no_std` support: an item that was reachable without `std` must stay reachable, and nothing ungated may
+  start requiring `std` or an allocator
 - On-disk format compatibility for the formats the crate reads and writes: a file written by the previous
   version must still parse, and a file this version writes must still load on the console
 

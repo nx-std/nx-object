@@ -8,7 +8,7 @@ allowed-tools: "Bash(just check:*), Bash(just clippy:*), Bash(just check-unused-
 
 Code validation and linting for the `nx-std/nx-object` crate. Optimized for **minimum wall-clock time to first error**: cheapest signal first, auto-fix before hand-fix.
 
-The repository holds a single crate, so there is no per-crate selection to make. What varies here is the **feature set**: the crate is `no_std` with default features and pulls in `std` through `filesystem-support`, so a change can compile in one configuration and fail in the other.
+The repository holds a single crate, so there is no per-crate selection to make. What varies here is the **feature set**: the crate carries every format and `std` by default, and drops to `alloc` or to bare `no_std` on demand, so a change can compile in one configuration and fail in the other.
 
 ## When to Use This Skill
 
@@ -34,7 +34,7 @@ The recipes take the flags rather than baking them in, so the same two invocatio
 | Configuration | Flags                                                       |
 |---------------|--------------------------------------------------------------|
 | `std`         | `--all-targets --all-features`                               |
-| `no-std`      | `--no-default-features --target aarch64-unknown-none`        |
+| `no-std`      | `--no-default-features --features all-formats,alloc --target aarch64-unknown-none` |
 
 `--all-targets` belongs to the `std` set only: on a bare-metal target the test and bench targets fail to build outright, because they link the libtest harness and want a `#[panic_handler]`.
 
@@ -42,8 +42,8 @@ Run the `std` set always. Add the `no-std` set when any of these is true:
 
 | Signal                     | Meaning                                                                          |
 |----------------------------|----------------------------------------------------------------------------------|
-| **Feature-gated code edit**| A file under `src/raw/` or `src/read/`, or any code not behind `filesystem-support`. |
-| **New import**             | Any `use` added outside a `filesystem-support` gate. `std` is unavailable there.  |
+| **Feature-gated code edit**| A file under `src/raw/`, `src/read/` or `src/write/`, or any code not behind a `std` gate. |
+| **New import**             | Any `use` added outside a `std` gate. `std` is unavailable there.                |
 | **Feature or gate change** | `[features]` in `Cargo.toml`, or a `#[cfg(feature = ...)]` added, moved, or removed. |
 | **New dependency**         | A dependency added, or an existing one's `default-features`/`features` changed.   |
 
@@ -73,7 +73,7 @@ Runs `cargo check` with whatever flags you pass. **Default Stage 1 command.**
 
 Examples:
 - `just check --all-targets --all-features` — the `std` configuration
-- `just check --no-default-features --target aarch64-unknown-none` — the `no-std` configuration
+- `just check --no-default-features --features all-formats,alloc --target aarch64-unknown-none` — the `no-std` configuration
 
 ### Lint Rust Code with Auto-fix
 ```bash
@@ -84,7 +84,7 @@ Runs `cargo clippy` with whatever flags you pass. **Default Stage 2 command.**
 Examples:
 - `just clippy --all-targets --all-features --fix --allow-dirty --allow-staged` — standard auto-fix pass
 - `just clippy --all-targets --all-features` — residue pass (after `--fix`) to surface remaining warnings
-- `just clippy --no-default-features --target aarch64-unknown-none -- -D warnings` — the `no-std` lint CI runs
+- `just clippy --no-default-features --features all-formats,alloc --target aarch64-unknown-none -- -D warnings` — the `no-std` lint CI runs
 
 #### Auto-fix semantics
 
@@ -104,7 +104,7 @@ Before considering a task complete: all checks MUST pass AND all clippy warnings
 ### Example Workflows
 
 **Common case (write-layer edit):**
-Edits in `src/write/...`, which is behind `filesystem-support`.
+Edits in `src/write/...`, which is behind `alloc`.
 
 1. Format changes: use `/code-format`.
 2. **Stage 0** — probe `mcp__ide__getDiagnostics`. If available, call with each edited file's `file://` URI. Fix reported issues.
@@ -121,10 +121,10 @@ Edits in `src/raw/...`, which compiles in every configuration.
 2. **Stage 0** — probe `mcp__ide__getDiagnostics`; fix surfaced issues.
 3. **Stage 1** — run both configurations → fix errors → repeat until both are clean:
    - `just check --all-targets --all-features`
-   - `just check --no-default-features --target aarch64-unknown-none`
+   - `just check --no-default-features --features all-formats,alloc --target aarch64-unknown-none`
 4. **Stage 2** — `just clippy --all-targets --all-features --fix --allow-dirty --allow-staged`, hand-fix the
    residue, then lint the other configuration:
-   `just clippy --no-default-features --target aarch64-unknown-none`
+   `just clippy --no-default-features --features all-formats,alloc --target aarch64-unknown-none`
 5. Re-run `/code-format` if `--fix` changed source.
 6. Done when: zero errors AND zero warnings in both configurations.
 
