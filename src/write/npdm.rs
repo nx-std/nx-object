@@ -10,14 +10,15 @@
 //! the META header records the offset and size of the other two. Every offset is
 //! therefore computed before any bytes are emitted.
 
-use std::collections::HashMap;
+use alloc::{collections::BTreeMap, string::String, vec, vec::Vec};
 
 use zerocopy::FromZeros;
 
 /// Memory region descriptor for MapRegion kernel capability.
 ///
 /// Each descriptor specifies a region type and read-only flag.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MapRegionDescriptor {
     /// Region type (6-bit value)
     pub region_type: u8,
@@ -32,8 +33,12 @@ pub struct MapRegionDescriptor {
 /// bit pattern that identifies the capability type.
 ///
 /// See: <https://switchbrew.org/wiki/NPDM#Kernel_Capability_Descriptors>
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(tag = "type", content = "value", rename_all = "snake_case")
+)]
 pub enum KernelCapability {
     /// Kernel flags: thread priority range and CPU affinity mask.
     ///
@@ -55,7 +60,7 @@ pub enum KernelCapability {
     /// (192 syscalls total, 24 per entry).
     ///
     /// Trailer: `0b1111` (4 trailing 1-bits)
-    Syscalls(HashMap<String, u64>),
+    Syscalls(BTreeMap<String, u64>),
 
     /// Memory region mapping with permissions.
     ///
@@ -724,7 +729,7 @@ fn build_filesystem_access_header(fs_access: &FilesystemAccess) -> Vec<u8> {
         // Add padding to align to 4-byte boundary
         let accessibility_len = fs_access.save_data_owner_ids.len();
         let padding = ((accessibility_len + 3) & !3) - accessibility_len;
-        data.extend(std::iter::repeat_n(0, padding));
+        data.extend(core::iter::repeat_n(0, padding));
 
         // IDs array (u64[])
         for entry in &fs_access.save_data_owner_ids {

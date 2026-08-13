@@ -1,6 +1,13 @@
 //! RomFS (Read-only filesystem) builder.
 
-use std::{path::PathBuf, string::String, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString as _},
+    vec,
+    vec::Vec,
+};
+#[cfg(feature = "std")]
+use std::path::PathBuf;
 
 use crate::raw::romfs::{NO_ENTRY, RomFsDirEntry, RomFsFileEntry, path_hash};
 
@@ -158,7 +165,7 @@ impl RomFsBuilder {
     /// Returns an error if the tree cannot be walked or a file cannot be read, if
     /// a name is not valid UTF-8, or if a symlink is encountered: RomFS has no
     /// representation for one, so it is refused rather than followed or skipped.
-    #[cfg(feature = "filesystem-support")]
+    #[cfg(feature = "std")]
     pub fn from_directory(path: impl AsRef<std::path::Path>) -> Result<Self, FromDirectoryError> {
         use fs_err as fs;
 
@@ -607,7 +614,7 @@ pub enum BuildError {
 }
 
 /// Error returned by [`RomFsBuilder::from_directory`].
-#[cfg(feature = "filesystem-support")]
+#[cfg(feature = "std")]
 #[derive(Debug, thiserror::Error)]
 pub enum FromDirectoryError {
     /// A filesystem entry could not be read while walking the directory tree.

@@ -1,6 +1,6 @@
 //! NSO (Nintendo Software Object) builder.
 
-use std::vec::Vec;
+use alloc::vec::Vec;
 
 use zerocopy::FromZeros;
 

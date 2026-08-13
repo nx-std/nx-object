@@ -16,10 +16,15 @@ env:
 
 jobs:
   check:
-    # The `std` variant enables every feature, so the `write` builders and the ELF
-    # and LZ4 paths are compiled; the `no-std` variant drops default features and
-    # cross-compiles to a target that has no std at all, which is what catches a
-    # dependency enabling std behind the crate's back.
+    # Both variants build every format, so what separates them is the runtime.
+    #
+    # `std` enables every feature, so the `write` builders and the ELF and LZ4
+    # paths are compiled. `no-std` cross-compiles to a target that has no std at
+    # all, which is what catches a dependency enabling std behind the crate's
+    # back. It takes `alloc` with the formats, so the builders are compiled there
+    # too: they need a heap and nothing more, and they are where a `use std::`
+    # would otherwise creep back in unnoticed. It names the formats rather than
+    # taking the defaults, since the defaults carry `std`.
     #
     # aarch64-unknown-none stands in for the console's own
     # aarch64-nintendo-switch-freestanding, which is tier 3 and would need
@@ -39,7 +44,7 @@ jobs:
             flags: '--all-targets --all-features'
           - variant: no-std
             target: aarch64-unknown-none
-            flags: '--no-default-features --target aarch64-unknown-none'
+            flags: '--no-default-features --features all-formats,alloc --target aarch64-unknown-none'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
