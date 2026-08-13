@@ -2,10 +2,9 @@
 
 use std::{path::PathBuf, string::String, vec::Vec};
 
-use crate::raw::romfs::{RomFsDirEntry, RomFsFileEntry};
+use crate::raw::romfs::{NO_ENTRY, RomFsDirEntry, RomFsFileEntry, path_hash};
 
 const ROMFS_FILEPARTITION_OFS: u64 = 0x200;
-const ROMFS_ENTRY_EMPTY: u32 = 0xFFFFFFFF;
 
 /// Internal directory entry for building RomFS.
 struct DirEntry {
@@ -271,8 +270,8 @@ impl RomFsBuilder {
         self.calculate_offsets();
 
         // Initialize hash sibling tracking
-        self.dir_hash_siblings = vec![ROMFS_ENTRY_EMPTY; self.dirs.len()];
-        self.file_hash_siblings = vec![ROMFS_ENTRY_EMPTY; self.files.len()];
+        self.dir_hash_siblings = vec![NO_ENTRY; self.dirs.len()];
+        self.file_hash_siblings = vec![NO_ENTRY; self.files.len()];
 
         // Generate hash tables
         let dir_hash_table = self.generate_dir_hash_table();
@@ -413,11 +412,11 @@ impl RomFsBuilder {
 
     fn generate_dir_hash_table(&mut self) -> Vec<u32> {
         let table_size = romfs_get_hash_table_count(self.dirs.len());
-        let mut table = vec![ROMFS_ENTRY_EMPTY; table_size];
+        let mut table = vec![NO_ENTRY; table_size];
 
         for (dir_idx, dir) in self.dirs.iter().enumerate() {
             let parent_offset = self.dirs[dir.parent].entry_offset;
-            let hash = calc_path_hash(parent_offset, &dir.name);
+            let hash = path_hash(parent_offset, dir.name.as_bytes());
             let bucket = (hash as usize) % table_size;
 
             // Chain collision: new entry becomes head, points to old head
@@ -431,11 +430,11 @@ impl RomFsBuilder {
 
     fn generate_file_hash_table(&mut self) -> Vec<u32> {
         let table_size = romfs_get_hash_table_count(self.files.len());
-        let mut table = vec![ROMFS_ENTRY_EMPTY; table_size];
+        let mut table = vec![NO_ENTRY; table_size];
 
         for (file_idx, file) in self.files.iter().enumerate() {
             let parent_offset = self.dirs[file.parent].entry_offset;
-            let hash = calc_path_hash(parent_offset, &file.name);
+            let hash = path_hash(parent_offset, file.name.as_bytes());
             let bucket = (hash as usize) % table_size;
 
             // Chain collision: new entry becomes head, points to old head
@@ -457,12 +456,12 @@ impl RomFsBuilder {
                 .children
                 .first()
                 .map(|&idx| self.dirs[idx].entry_offset)
-                .unwrap_or(ROMFS_ENTRY_EMPTY);
+                .unwrap_or(NO_ENTRY);
             let first_file = dir
                 .files
                 .first()
                 .map(|&idx| self.files[idx].entry_offset)
-                .unwrap_or(ROMFS_ENTRY_EMPTY);
+                .unwrap_or(NO_ENTRY);
 
             let hash_sibling = self.dir_hash_siblings[dir_idx];
 
@@ -520,7 +519,7 @@ impl RomFsBuilder {
             .windows(2)
             .find(|window| self.dirs[window[0]].entry_offset == dir.entry_offset)
             .map(|window| self.dirs[window[1]].entry_offset)
-            .unwrap_or(ROMFS_ENTRY_EMPTY)
+            .unwrap_or(NO_ENTRY)
     }
 
     fn find_sibling_file(&self, file: &FileEntry) -> u32 {
@@ -530,7 +529,7 @@ impl RomFsBuilder {
             .windows(2)
             .find(|window| self.files[window[0]].entry_offset == file.entry_offset)
             .map(|window| self.files[window[1]].entry_offset)
-            .unwrap_or(ROMFS_ENTRY_EMPTY)
+            .unwrap_or(NO_ENTRY)
     }
 
     fn write_header(
@@ -663,15 +662,6 @@ fn romfs_get_hash_table_count(num_entries: usize) -> usize {
         }
         n
     }
-}
-
-/// Calculate path hash for hash table lookup.
-fn calc_path_hash(parent_offset: u32, name: &str) -> u32 {
-    let mut hash = parent_offset ^ 123_456_789;
-    for c in name.bytes() {
-        hash = hash.rotate_right(5) ^ u32::from(c);
-    }
-    hash
 }
 
 /// Align value to specified alignment.
