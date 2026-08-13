@@ -7,7 +7,9 @@
 //! `0x20`-byte boundary is written even though nothing reads it: the data region begins where the
 //! header's `string_table_size` says it does, and a table shorter than it claims moves every file.
 
-use std::{path::PathBuf, string::String, vec::Vec};
+use alloc::{string::String, vec, vec::Vec};
+#[cfg(feature = "std")]
+use std::path::PathBuf;
 
 use zerocopy::IntoBytes;
 
@@ -45,6 +47,7 @@ impl Pfs0Builder {
     /// name is not valid UTF-8, or if a scanned file is rejected by
     /// [`Pfs0Builder::add_file`]. Subdirectories are skipped rather than refused,
     /// because PFS0 has no representation for nesting.
+    #[cfg(feature = "std")]
     pub fn from_directory(path: impl AsRef<std::path::Path>) -> Result<Self, FromDirectoryError> {
         let path = path.as_ref();
         let mut builder = Self::new();
@@ -273,6 +276,7 @@ pub enum AddFileError {
 }
 
 /// Error returned by [`Pfs0Builder::from_directory`].
+#[cfg(feature = "std")]
 #[derive(Debug, thiserror::Error)]
 pub enum FromDirectoryError {
     /// A filesystem entry could not be read while scanning the directory.

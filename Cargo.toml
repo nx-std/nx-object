@@ -15,17 +15,54 @@ doctest = false
 bench = false
 
 [features]
-## Default features, enabled unless default-features = false
-default = []
-## ELF parsing, for deriving NRO and NSO segments from a linked binary
-elf-parsing = ["filesystem-support", "dep:object"]
-## Filesystem-backed write layer: the format builders and their output paths
-filesystem-support = ["dep:fs-err", "dep:serde", "dep:sha2", "serde/std"]
-## LZ4 compression and decompression of NSO segments
-lz4-compression = ["filesystem-support", "dep:lz4_flex"]
+## Every format and the standard library, so a consumer who names none gets the whole crate
+default = ["all-formats", "std"]
+## Every format at once, for a consumer that would rather not list them
+all-formats = ["kip", "mod0", "nacp", "npdm", "nro", "nso", "pfs0", "romfs"]
+## The heap the builders assemble an image on, which is all they need beyond `no_std`
+alloc = ["serde?/alloc", "zerocopy/alloc"]
+## ELF parsing, for deriving NRO and NSO segments from a linked binary.
+## Pulls `nro` and `nso`: it derives the segments by driving those two builders.
+elf-parsing = ["std", "nro", "nso", "dep:object"]
+## KIP1, the image a kernel initial process is loaded from
+kip = []
+## LZ4 compression and decompression of NSO segments.
+## Pulls `nso`: the segments it compresses are that builder's.
+lz4-compression = ["alloc", "nso", "dep:lz4_flex"]
+## MOD0, the module header an NRO or NSO points at
+mod0 = []
+## NACP, the control property naming a title
+nacp = []
+## NPDM, the metadata describing a program's permissions
+npdm = []
+## NRO, the relocatable object homebrew ships as
+nro = []
+## NSO, the shared object official software ships as.
+## Pulls `sha2`: an NSO header carries a digest of each segment, so building one hashes them.
+nso = ["dep:bitflags", "dep:sha2"]
+## PFS0, the partition archive an NSP is built from
+pfs0 = []
+## RomFS, the read-only filesystem an image carries
+romfs = []
+## `serde` derives on the NPDM builder's inputs, for a consumer that reads them from a config file
+serde = ["alloc", "dep:serde"]
+## The standard library, which is what the `from_directory` builders need: a filesystem to walk and
+## a `PathBuf` to name what they found in. It carries `fs-err` for the same reason.
+##
+## Every dependency that draws a line between `core` and `std` is told which side this build is on,
+## rather than being left on the `no_std` side of it because that is what the bare-metal build needs.
+std = [
+    "alloc",
+    "dep:fs-err",
+    "bitflags?/std",
+    "serde?/std",
+    "sha2?/std",
+    "thiserror/std",
+    "zerocopy/std",
+]
 
 [dependencies]
-bitflags = "2.9"
+bitflags = { version = "2.9", optional = true }
 fs-err = { version = "3.1", optional = true }
 lz4_flex = { version = "0.11", optional = true, default-features = false }
 object = { version = "0.38", optional = true, default-features = false, features = ["read", "elf"] }

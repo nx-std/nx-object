@@ -7,9 +7,9 @@
 //! Titles are held per language until the structure is built, because a name set for all languages
 //! and a name set for one have to compose, and the last writer for a given language wins.
 
-use std::{string::String, vec::Vec};
+use alloc::{string::String, vec, vec::Vec};
 
-use crate::{raw::nacp::NacpStruct, read::SetLanguage};
+use crate::{raw::nacp::NacpStruct, read::nacp::SetLanguage};
 
 /// Fills in the fixed `0x4000`-byte control structure a title is described by.
 ///

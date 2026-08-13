@@ -8,7 +8,7 @@
 //! segment offset, and why an NRO carrying assets and one without are the same image up to that
 //! point.
 
-use std::vec::Vec;
+use alloc::{vec, vec::Vec};
 
 use zerocopy::FromZeros;
 

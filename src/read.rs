@@ -15,23 +15,15 @@
 //! it against the header's digest is the caller's, because a borrowing reader has nowhere to put
 //! the expanded bytes.
 
-mod mod0;
-mod nacp;
-mod npdm;
-mod nro;
-mod nso;
-mod romfs;
-
-pub use self::{
-    mod0::{FromBytesError as Mod0FromBytesError, FromPtrError as Mod0FromPtrError, Mod0},
-    nacp::{
-        FromBytesError as NacpFromBytesError, FromPtrError as NacpFromPtrError, Nacp, SetLanguage,
-    },
-    npdm::{FromBytesError as NpdmFromBytesError, Npdm},
-    nro::{FromBytesError as NroFromBytesError, FromPtrError as NroFromPtrError, Nro},
-    nso::{FromBytesError as NsoFromBytesError, FromPtrError as NsoFromPtrError, Nso},
-    romfs::{
-        DirIterator, FromBytesError as RomFsFromBytesError, OpenError as RomFsOpenError, RomFs,
-        RomFsDir, RomFsEntry, RomFsFile, RootDirError as RomFsRootDirError,
-    },
-};
+#[cfg(feature = "mod0")]
+pub mod mod0;
+#[cfg(feature = "nacp")]
+pub mod nacp;
+#[cfg(feature = "npdm")]
+pub mod npdm;
+#[cfg(feature = "nro")]
+pub mod nro;
+#[cfg(feature = "nso")]
+pub mod nso;
+#[cfg(feature = "romfs")]
+pub mod romfs;

@@ -14,18 +14,32 @@
 //! them on build, so the same inputs always produce the same bytes and an artifact can be compared
 //! against a rebuild.
 
+#[cfg(feature = "kip")]
 pub mod kip;
+#[cfg(feature = "nacp")]
 pub mod nacp;
+#[cfg(feature = "npdm")]
 pub mod npdm;
+#[cfg(feature = "nro")]
 pub mod nro;
+#[cfg(feature = "nso")]
 pub mod nso;
+#[cfg(feature = "pfs0")]
 pub mod pfs0;
+#[cfg(feature = "romfs")]
 pub mod romfs;
 
+#[cfg(feature = "kip")]
 pub use kip::Kip1Builder;
+#[cfg(feature = "nacp")]
 pub use nacp::NacpBuilder;
+#[cfg(feature = "npdm")]
 pub use npdm::NpdmBuilder;
+#[cfg(feature = "nro")]
 pub use nro::NroBuilder;
+#[cfg(feature = "nso")]
 pub use nso::NsoBuilder;
+#[cfg(feature = "pfs0")]
 pub use pfs0::Pfs0Builder;
+#[cfg(feature = "romfs")]
 pub use romfs::RomFsBuilder;

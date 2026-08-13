@@ -8,7 +8,7 @@
 //! KIP1 segments (text, rodata, data) are compressed using the BLZ algorithm,
 //! implemented in the crate-private `blz` module.
 
-use std::vec::Vec;
+use alloc::{string::String, vec, vec::Vec};
 
 use zerocopy::FromZeros;
 

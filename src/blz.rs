@@ -80,7 +80,7 @@
 //!
 //! - <https://switchbrew.org/wiki/KIP>
 
-use std::vec::Vec;
+use alloc::{vec, vec::Vec};
 
 use static_assertions::const_assert_eq;
 use zerocopy::{IntoBytes, little_endian::U32};
