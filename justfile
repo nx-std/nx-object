@@ -1,0 +1,139 @@
+# Display available commands (default target)
+default:
+    @just --list
+
+
+## Format
+
+alias fmt := fmt-rs
+alias fmt-check := fmt-rs-check
+
+# Format Rust code (cargo fmt --all)
+[group: 'format']
+fmt-rs:
+    cargo +nightly fmt --all
+
+# Check Rust code format (cargo fmt --check)
+[group: 'format']
+fmt-rs-check:
+    cargo +nightly fmt --all -- --check
+
+
+## Check
+
+alias check := check-rs
+
+# Check Rust code (cargo check --all-targets)
+[group: 'check']
+check-rs *EXTRA_FLAGS:
+    cargo check --all-targets {{EXTRA_FLAGS}}
+
+# Check the no_std build (default features, no filesystem-support)
+[group: 'check']
+check-no-std *EXTRA_FLAGS:
+    cargo check --no-default-features {{EXTRA_FLAGS}}
+
+# Lint Rust code (cargo clippy --all-targets)
+[group: 'check']
+clippy *EXTRA_FLAGS:
+    cargo clippy --all-targets {{EXTRA_FLAGS}}
+
+alias check-deps := check-unused-deps
+
+# Check for unused Rust dependencies (cargo machete)
+[group: 'check']
+check-unused-deps:
+    cargo machete
+
+
+## Testing
+
+# Run all tests
+[group: 'test']
+test *EXTRA_FLAGS:
+    #!/usr/bin/env bash
+    set -e
+    if command -v "cargo-nextest" &> /dev/null; then
+        cargo nextest run {{EXTRA_FLAGS}}
+    else
+        >&2 echo "================================================================="
+        >&2 echo "WARNING: cargo-nextest not found - using 'cargo test' fallback"
+        >&2 echo ""
+        >&2 echo "For faster test execution, consider installing cargo-nextest:"
+        >&2 echo "  cargo install --locked cargo-nextest@^0.9"
+        >&2 echo "================================================================="
+        sleep 1
+        cargo test {{EXTRA_FLAGS}}
+    fi
+
+
+## Clean
+
+alias clean := cargo-clean
+
+# Clean cargo build artifacts (cargo clean)
+[group: 'clean']
+cargo-clean:
+    cargo clean
+
+
+## Misc
+
+PRECOMMIT_CONFIG := ".github/pre-commit-config.yaml"
+PRECOMMIT_DEFAULT_HOOKS := "pre-commit pre-push"
+
+# Install Git hooks
+[group: 'misc']
+install-git-hooks HOOKS=PRECOMMIT_DEFAULT_HOOKS:
+    #!/usr/bin/env bash
+    set -e # Exit on error
+
+    # Check if pre-commit is installed
+    if ! command -v "pre-commit" &> /dev/null; then
+        >&2 echo "=============================================================="
+        >&2 echo "Required command 'pre-commit' not available ❌"
+        >&2 echo ""
+        >&2 echo "Please install pre-commit using your preferred package manager"
+        >&2 echo "  pip install pre-commit"
+        >&2 echo "  pacman -S pre-commit"
+        >&2 echo "  apt-get install pre-commit"
+        >&2 echo "  brew install pre-commit"
+        >&2 echo "=============================================================="
+        exit 1
+    fi
+
+    # Install all Git hooks (see PRECOMMIT_DEFAULT_HOOKS for default hooks)
+    pre-commit install --config {{PRECOMMIT_CONFIG}} {{replace_regex(HOOKS, "\\s*([a-z-]+)\\s*", "--hook-type $1 ")}}
+
+# Remove Git hooks
+[group: 'misc']
+remove-git-hooks HOOKS=PRECOMMIT_DEFAULT_HOOKS:
+    #!/usr/bin/env bash
+    set -e # Exit on error
+
+    # Check if pre-commit is installed
+    if ! command -v "pre-commit" &> /dev/null; then
+        >&2 echo "=============================================================="
+        >&2 echo "Required command 'pre-commit' not available ❌"
+        >&2 echo ""
+        >&2 echo "Please install pre-commit using your preferred package manager"
+        >&2 echo "  pip install pre-commit"
+        >&2 echo "  pacman -S pre-commit"
+        >&2 echo "  apt-get install pre-commit"
+        >&2 echo "  brew install pre-commit"
+        >&2 echo "=============================================================="
+        exit 1
+    fi
+
+    # Remove all Git hooks (see PRECOMMIT_DEFAULT_HOOKS for default hooks)
+    pre-commit uninstall --config {{PRECOMMIT_CONFIG}} {{replace_regex(HOOKS, "\\s*([a-z-]+)\\s*", "--hook-type $1 ")}}
+
+# Install cargo-machete (unused dependency checker)
+[group: 'misc']
+install-cargo-machete:
+    cargo install --locked cargo-machete
+
+# Install cargo-nextest (faster test runner)
+[group: 'misc']
+install-cargo-nextest:
+    cargo install --locked cargo-nextest

@@ -1,0 +1,79 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: full
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          components: clippy
+          cache: true
+          rustflags: ''
+
+      - uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0 # v3.4.0
+        with:
+          crate: cargo-nextest
+          version: ^0.9
+          locked: true
+
+      ## Build
+      - name: check (release)
+        run: cargo check --all-features --release
+
+      - name: clippy
+        run: cargo clippy --all-features -- -D warnings --force-warn deprecated --force-warn dead-code
+
+      ## Test
+      - name: unit-tests
+        run: cargo nextest run --all-features
+
+      - name: doc-tests
+        run: cargo test --all-features --doc
+
+  # The crate is no_std unless `filesystem-support` is enabled; build against a
+  # target without std so an accidental std dependency fails the build.
+  no-std:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          target: thumbv7em-none-eabi
+          cache: true
+          rustflags: ''
+
+      - name: check (no_std)
+        run: cargo check --no-default-features --target thumbv7em-none-eabi
+
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          toolchain: nightly
+          components: rustfmt
+          cache: false
+
+      - run: cargo +nightly fmt --all -- --check

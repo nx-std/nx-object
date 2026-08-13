@@ -1,0 +1,35 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+# yaml-language-server: $schema=https://json.schemastore.org/pre-commit-config.json
+repos:
+- repo: local
+  hooks:
+  ## Rust hooks
+  - id: fmt-rs
+    name: fmt-rs
+    language: system
+    entry: just fmt-rs
+    types_or: [rust, cargo, cargo-lock]
+    stages: [pre-commit, pre-merge-commit, manual]
+    pass_filenames: false
+  - id: fmt-rs-check
+    name: fmt-rs-check
+    language: system
+    entry: just fmt-rs-check
+    types_or: [rust, cargo, cargo-lock]
+    stages: [pre-push, manual]
+    pass_filenames: false
+  - id: check-rs
+    name: check-rs
+    language: system
+    entry: just check-rs
+    types_or: [rust, cargo, cargo-lock]
+    stages: [pre-push, manual]
+    pass_filenames: false
+  - id: check-unused-deps
+    name: check-unused-deps
+    language: system
+    entry: just check-unused-deps
+    types_or: [rust, cargo, cargo-lock]
+    stages: [pre-push, manual]
+    pass_filenames: false
