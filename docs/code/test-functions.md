@@ -135,9 +135,11 @@ Every test follows the Given-When-Then pattern with **MANDATORY** `//* Given`, `
 
 | Marker | Required | Purpose | Content |
 |---|---|---|---|
-| `//* Given` | Optional (omit when there is no setup) | Preconditions, test data, fixtures, system state | Variable declarations, temp directory setup, fixture construction |
+| `//* Given` | Required | Preconditions, test data, fixtures, system state | Variable declarations, temp directory setup, fixture construction; the bare constants and literals when there is nothing to construct |
 | `//* When` | Required | Execute **exactly one** function under test | **Only** the single call being tested |
 | `//* Then` | Required | Assert outcomes and side effects | **Only** assertions and assertion helpers such as `.expect()` used to extract a value |
+
+All three markers appear in every test, with no exceptions. A test that constructs nothing still has a precondition, so `//* Given` binds it to a named local: the empty buffer, the offset, the byte the case turns on. Naming it is what leaves `//* When` holding the call and nothing else, and what makes the scenario in the test's name findable in its body.
 
 More than one call in `//* When` means the test scope is too broad and failure attribution is impossible. Business logic in `//* Then` obscures what is being verified: if a value must be transformed before asserting, the transformation belongs in `//* Given`, or the test is verifying two things and should be split.
 
@@ -162,17 +164,20 @@ fn write_image_with_populated_dir_succeeds() {
     assert_eq!(image.root_dir().entries().count(), expected_entries);
 }
 
-// ✅ Good — no setup needed, so Given is omitted
+// ✅ Good — nothing to construct, so Given names the literal the case turns on
 #[test]
-fn get_default_with_uninitialized_state_fails() {
+fn try_from_bytes_with_an_empty_buffer_fails() {
+    //* Given
+    let bytes = b"";
+
     //* When
-    let result = get_default();
+    let result = Nro::try_from_bytes(bytes);
 
     //* Then
-    assert!(result.is_err(), "validation should fail for uninitialized state");
-    let error = result.expect_err("should return validation error");
-    assert!(matches!(error, ValidationError::EmptyInput),
-        "Expected EmptyInput error, got {:?}", error);
+    assert!(result.is_err(), "parsing should fail for a buffer with no header in it");
+    let error = result.expect_err("should return a parse error");
+    assert!(matches!(error, FromBytesError::BufferTooSmall { .. }),
+        "Expected BufferTooSmall error, got {:?}", error);
 }
 ```
 
@@ -292,7 +297,8 @@ Before submitting a test function for review, verify:
 - [ ] Test name follows `<function_name>_<scenario>_<expected_outcome>` format
 - [ ] Test name does NOT include the word "test" (it's already marked with `#[test]`)
 - [ ] Test uses correct framework: `#[test]` for sync, `#[tokio::test]` for async
-- [ ] Test has `//* Given`, `//* When`, and `//* Then` comments (Given optional if no setup needed)
+- [ ] Test has all three `//* Given`, `//* When`, and `//* Then` comments
+- [ ] `//* Given` is present even when nothing is constructed, naming the constants and literals the case turns on
 - [ ] Marker comments are keyword-only; explanatory prose goes on a following `//` line
 - [ ] `//* When` section calls EXACTLY ONE function under test
 - [ ] `//* Then` section contains ONLY assertions and assertion helpers
