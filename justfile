@@ -23,25 +23,20 @@ fmt-rs-check:
 
 alias check := check-rs
 
-# Check Rust code (cargo check --all-targets)
+# Neither recipe hardcodes --all-targets: the caller picks the configuration, and on
+# a bare-metal target the test and bench targets cannot build at all, because they
+# link the libtest harness and need a panic handler. The no_std build is
+# `just check-rs --no-default-features --target aarch64-unknown-none`.
+
+# Check Rust code (cargo check)
 [group: 'check']
 check-rs *EXTRA_FLAGS:
-    cargo check --all-targets {{EXTRA_FLAGS}}
+    cargo check {{EXTRA_FLAGS}}
 
-# Target the no_std check runs against. It stands in for the console's
-# aarch64-nintendo-switch-freestanding, which is tier 3 and would need -Z build-std.
-# Install it once with: rustup target add aarch64-unknown-none
-NO_STD_TARGET := "aarch64-unknown-none"
-
-# Check the no_std build (no default features, so no filesystem-support and no std)
-[group: 'check']
-check-no-std *EXTRA_FLAGS:
-    cargo check --no-default-features --target {{NO_STD_TARGET}} {{EXTRA_FLAGS}}
-
-# Lint Rust code (cargo clippy --all-targets)
+# Lint Rust code (cargo clippy)
 [group: 'check']
 clippy *EXTRA_FLAGS:
-    cargo clippy --all-targets {{EXTRA_FLAGS}}
+    cargo clippy {{EXTRA_FLAGS}}
 
 alias check-deps := check-unused-deps
 
