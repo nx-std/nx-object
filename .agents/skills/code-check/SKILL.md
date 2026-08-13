@@ -39,7 +39,7 @@ Run `just check-no-std` in addition to `just check-rs` when any of these is true
 | **Feature or gate change** | `[features]` in `Cargo.toml`, or a `#[cfg(feature = ...)]` added, moved, or removed. |
 | **New dependency**         | A dependency added, or an existing one's `default-features`/`features` changed.   |
 
-`just check-rs` alone compiles with default features but still links against the host `std`, so an accidental `std` path inside `no_std` code surfaces only in the `no_std` check.
+`just check-rs` compiles for the host, where `std` exists. `just check-no-std` cross-compiles to `aarch64-unknown-none`, which has no `std` at all, so a dependency that quietly enables `std` (a feature that unified the wrong way, a `default-features` flag left on) fails there and only there.
 
 ## Stage 0 — Rust-analyzer Diagnostics (Fast Path)
 
@@ -69,7 +69,9 @@ Examples:
 ```bash
 just check-no-std [EXTRA_FLAGS]
 ```
-Checks the crate without default features (`cargo check --no-default-features`). Run whenever a signal from the table above fires.
+Checks the crate without default features, cross-compiled to `aarch64-unknown-none` (`cargo check --no-default-features --target aarch64-unknown-none`). Run whenever a signal from the table above fires.
+
+The target stands in for the console's own `aarch64-nintendo-switch-freestanding`, which is tier 3 and would need `-Z build-std` on nightly. Install it once with `rustup target add aarch64-unknown-none`.
 
 ### Lint Rust Code with Auto-fix
 ```bash
@@ -125,7 +127,7 @@ Edits in `src/raw/...`, which compiles in every configuration.
 ### Anti-patterns
 - **Never run `cargo check` directly** — use `just check-rs` or `just check-no-std`.
 - **Never run `cargo clippy` directly** — the justfile recipe adds proper flags like `--all-targets`.
-- **Never assume the default-feature check covers `no_std`** — it compiles against the host `std`, so a `std` path inside ungated code passes it.
+- **Never assume the default-feature check covers `no_std`** — it compiles for the host, where `std` is available to every dependency.
 - **Never skip Stage 1 just because Stage 0 is clean** — rust-analyzer may be stale.
 - **Never run clippy without `--fix` on the first pass** — wastes cycles on machine-applicable lints.
 - **Never pass `--fix` without `--allow-dirty --allow-staged`** — cargo refuses to modify files in a dirty tree.

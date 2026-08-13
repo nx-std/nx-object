@@ -50,7 +50,7 @@ nx-object = { git = "https://github.com/nx-std/nx-object" }
 
 ```bash
 just check          # cargo check --all-targets
-just check-no-std   # cargo check --no-default-features
+just check-no-std   # cargo check --no-default-features --target aarch64-unknown-none
 just test           # cargo nextest run (falls back to cargo test)
 just fmt            # cargo +nightly fmt --all
 ```

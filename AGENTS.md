@@ -123,7 +123,9 @@ format has all three layers; see the table in `README.md`.
 
 `#![cfg_attr(not(feature = "filesystem-support"), no_std)]` in `src/lib.rs` is what makes the default build
 `no_std`. Code that is not behind a `filesystem-support` gate therefore may not reach for `std`, and the check
-that proves it is `just check-no-std`.
+that proves it is `just check-no-std`, which cross-compiles to `aarch64-unknown-none`. That target stands in
+for the console's `aarch64-nintendo-switch-freestanding`, which is tier 3 and would need `-Z build-std` on
+nightly; both are 64-bit aarch64, so pointer width and alignment match what the console sees.
 
 
 ## 4. Build System

@@ -28,10 +28,15 @@ alias check := check-rs
 check-rs *EXTRA_FLAGS:
     cargo check --all-targets {{EXTRA_FLAGS}}
 
-# Check the no_std build (default features, no filesystem-support)
+# Target the no_std check runs against. It stands in for the console's
+# aarch64-nintendo-switch-freestanding, which is tier 3 and would need -Z build-std.
+# Install it once with: rustup target add aarch64-unknown-none
+NO_STD_TARGET := "aarch64-unknown-none"
+
+# Check the no_std build (no default features, so no filesystem-support and no std)
 [group: 'check']
 check-no-std *EXTRA_FLAGS:
-    cargo check --no-default-features {{EXTRA_FLAGS}}
+    cargo check --no-default-features --target {{NO_STD_TARGET}} {{EXTRA_FLAGS}}
 
 # Lint Rust code (cargo clippy --all-targets)
 [group: 'check']
