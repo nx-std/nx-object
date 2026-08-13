@@ -14,59 +14,55 @@ use zerocopy::{
     little_endian::{U32, U64},
 };
 
-/// META magic number: "META" in ASCII (0x4154454d).
+/// Magic identifying the NPDM META header: `META`, little-endian, at offset zero.
 pub const META_MAGIC: u32 = 0x4154454d;
 
-/// ACID magic number: "ACID" in ASCII (0x44494341).
+/// Magic identifying the ACID section: `ACID`, little-endian.
 pub const ACID_MAGIC: u32 = 0x44494341;
 
-/// ACI0 magic number: "ACI0" in ASCII (0x30494341).
+/// Magic identifying the ACI0 section: `ACI0`, little-endian.
 pub const ACI0_MAGIC: u32 = 0x30494341;
 
-/// NPDM META header - root header containing program metadata.
+/// How the process is started, and where its two access-control sections are.
 ///
-/// The META header is the top-level structure in an NPDM file, containing
-/// basic program information and offsets to the ACID and ACI0 sections.
+/// The root of an NPDM: it fixes the scheduling and memory the process is created with, and locates
+/// [`AcidHeader`] and [`Aci0Header`], which carry the permissions themselves.
 ///
-/// See: <https://switchbrew.org/wiki/NPDM>
+/// See <https://switchbrew.org/wiki/NPDM#Meta>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NpdmHeader {
-    /// Magic number (must be [`META_MAGIC`])
+    /// Always [`META_MAGIC`]; anything else means this is not an NPDM.
     pub magic: U32,
-    /// Signature key generation
+    /// Which generation of signing key the ACID signature was produced with.
     pub signature_key_generation: U32,
-    /// Reserved
     _reserved_08: U32,
-    /// Flags
+    /// Process attributes: 64-bit or 32-bit, the address space size, and whether it may be debugged.
     pub flags: u8,
-    /// Reserved
     _reserved_0d: u8,
-    /// Main thread priority (0-63, higher = lower priority)
+    /// Priority the main thread starts at, from `0` to `63`, lower being more favourable.
     pub main_thread_priority: u8,
-    /// Default CPU core for main thread
+    /// Core the main thread is scheduled on by default.
     pub main_thread_core_number: u8,
-    /// Reserved
     _reserved_10: U32,
-    /// System resource size
+    /// Extra memory granted to the process for system resources, in bytes.
     pub system_resource_size: U32,
-    /// Program version
+    /// Program version, as the system compares it when deciding whether an update applies.
     pub version: U32,
-    /// Main thread stack size in bytes
+    /// Stack reserved for the main thread, in bytes.
     pub main_thread_stack_size: U32,
-    /// Program name (UTF-8, null-terminated)
+    /// Program name, UTF-8 and NUL-padded to 16 bytes.
     pub name: [u8; 16],
-    /// Product code
+    /// Product code, NUL-padded to 16 bytes, empty for homebrew.
     pub product_code: [u8; 16],
-    /// Reserved
     _reserved_40: [u8; 48],
-    /// Offset to ACI0 section (relative to NPDM start)
+    /// Offset of the ACI0 section, from the start of the image.
     pub aci_offset: U32,
-    /// Size of ACI0 section in bytes
+    /// Length of the ACI0 section in bytes.
     pub aci_size: U32,
-    /// Offset to ACID section (relative to NPDM start)
+    /// Offset of the ACID section, from the start of the image.
     pub acid_offset: U32,
-    /// Size of ACID section in bytes
+    /// Length of the ACID section in bytes.
     pub acid_size: U32,
 }
 
@@ -74,48 +70,45 @@ pub struct NpdmHeader {
 const_assert_eq!(size_of::<NpdmHeader>(), 0x80);
 const_assert_eq!(align_of::<NpdmHeader>(), 0x1);
 
-/// ACID (Access Control Info Descriptor) header - signed access control.
+/// The permissions a signing authority granted, and the program IDs they were granted to.
 ///
-/// The ACID section contains RSA-signed permissions and capabilities.
-/// It specifies allowed program ID ranges and contains offsets to
-/// filesystem access control (FAC), service access control (SAC),
-/// and kernel capabilities (KC) data.
+/// ACID is the signed half of the pair: it states the maximum a program may be given, and the
+/// signature is what makes that binding. ACI0 then requests some subset of it, and the loader
+/// rejects a program asking for more than its ACID allows.
 ///
-/// See: <https://switchbrew.org/wiki/NPDM#ACID>
+/// See <https://switchbrew.org/wiki/NPDM#ACID>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct AcidHeader {
-    /// RSA-2048 signature over ACID header + data
+    /// RSA-2048 signature over everything in this section after the signature itself.
     pub signature: [u8; 0x100],
-    /// RSA-2048 public key for signature verification
+    /// RSA-2048 modulus the signature is verified against.
     pub public_key: [u8; 0x100],
-    /// Magic number (must be [`ACID_MAGIC`])
+    /// Always [`ACID_MAGIC`]; anything else means the offset did not point at an ACID section.
     pub magic: U32,
-    /// Size of ACID section excluding the 0x100-byte RSA signature
+    /// Length of the signed region in bytes, which excludes the `0x100`-byte signature above it.
     pub size: U32,
-    /// ACID version
+    /// ACID format revision.
     pub version: u8,
-    /// Reserved
     _reserved_209: [u8; 3],
-    /// Flags (production/unqualified approval, etc.)
+    /// Whether the descriptor is for production, and whether it was approved unqualified.
     pub flags: U32,
-    /// Minimum allowed program ID
+    /// Lowest program ID this descriptor may be applied to.
     pub program_id_min: U64,
-    /// Maximum allowed program ID
+    /// Highest program ID this descriptor may be applied to.
     pub program_id_max: U64,
-    /// Offset to FAC data (relative to ACID start)
+    /// Offset of the filesystem-access block, from the start of this section.
     pub fac_offset: U32,
-    /// Size of FAC data
+    /// Length of the filesystem-access block in bytes.
     pub fac_size: U32,
-    /// Offset to SAC data (relative to ACID start)
+    /// Offset of the service-access block, from the start of this section.
     pub sac_offset: U32,
-    /// Size of SAC data
+    /// Length of the service-access block in bytes.
     pub sac_size: U32,
-    /// Offset to KC data (relative to ACID start)
+    /// Offset of the kernel-capability block, from the start of this section.
     pub kc_offset: U32,
-    /// Size of KC data
+    /// Length of the kernel-capability block in bytes.
     pub kc_size: U32,
-    /// Reserved
     _reserved_238: U64,
 }
 
@@ -123,37 +116,34 @@ pub struct AcidHeader {
 const_assert_eq!(size_of::<AcidHeader>(), 0x240);
 const_assert_eq!(align_of::<AcidHeader>(), 0x1);
 
-/// ACI0 (Access Control Info) header - actual program permissions.
+/// The permissions this program actually requests, and the program ID it runs as.
 ///
-/// The ACI0 section contains the actual access control information
-/// that will be used at runtime. Similar structure to ACID but without
-/// signature/public key and program ID range.
+/// ACI0 is the unsigned half of the pair: it carries the same three blocks as [`AcidHeader`] and
+/// is checked against it at load, so nothing here grants anything the descriptor did not already
+/// allow. Its blocks are laid out identically, which is what lets the loader compare them directly.
 ///
-/// See: <https://switchbrew.org/wiki/NPDM#ACI0>
+/// See <https://switchbrew.org/wiki/NPDM#ACI0>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct Aci0Header {
-    /// Magic number (must be [`ACI0_MAGIC`])
+    /// Always [`ACI0_MAGIC`]; anything else means the offset did not point at an ACI0 section.
     pub magic: U32,
-    /// Reserved
     _reserved_04: [u8; 12],
-    /// Program ID (Title ID)
+    /// Title ID the process runs as, which must fall inside the ACID's permitted range.
     pub program_id: U64,
-    /// Reserved
     _reserved_18: U64,
-    /// Offset to FAC data (relative to ACI0 start)
+    /// Offset of the filesystem-access block, from the start of this section.
     pub fac_offset: U32,
-    /// Size of FAC data
+    /// Length of the filesystem-access block in bytes.
     pub fac_size: U32,
-    /// Offset to SAC data (relative to ACI0 start)
+    /// Offset of the service-access block, from the start of this section.
     pub sac_offset: U32,
-    /// Size of SAC data
+    /// Length of the service-access block in bytes.
     pub sac_size: U32,
-    /// Offset to KC data (relative to ACI0 start)
+    /// Offset of the kernel-capability block, from the start of this section.
     pub kc_offset: U32,
-    /// Size of KC data
+    /// Length of the kernel-capability block in bytes.
     pub kc_size: U32,
-    /// Reserved
     _reserved_38: U64,
 }
 

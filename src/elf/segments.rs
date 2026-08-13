@@ -1,4 +1,13 @@
-//! ELF segment extraction for Nintendo Switch executables.
+//! Extraction of the three loadable segments, the BSS size, and the build ID from an ELF.
+//!
+//! Segments are identified by position rather than by name: the `PT_LOAD` segments are sorted
+//! by address and taken as `text`, `rodata`, and `data` in that order, because a linker script
+//! is free to name the sections inside them anything at all. An ELF laying its segments out in
+//! another order is therefore misread rather than rejected, which is the constraint this
+//! module works under.
+//!
+//! BSS is whatever the image asks the loader to zero beyond what the file stores, and it is
+//! rounded up to a page because the loader maps it a page at a time.
 
 use std::vec::Vec;
 
@@ -10,16 +19,22 @@ use object::{
 
 use crate::write::{NroBuilder, NsoBuilder};
 
-/// Information about an ELF section.
+/// Where a named section sits in the linked image.
+///
+/// Carried for the sections the container headers have fields for, so a writer can fill them
+/// without parsing the ELF a second time.
 #[derive(Debug, Clone, Copy)]
 pub struct SectionInfo {
-    /// Virtual address of the section.
+    /// Address the section is linked at.
     pub addr: u64,
-    /// Size of the section in bytes.
+    /// Length of the section in bytes.
     pub size: u64,
 }
 
-/// Parsed ELF segments ready for NRO/NSO generation.
+/// The parts of a linked ELF that a Switch container format is built from.
+///
+/// Owns its segment bytes rather than borrowing the ELF, so the file it came from can be
+/// dropped before an image is written.
 pub struct ElfSegments {
     text: Vec<u8>,
     text_vaddr: u64,
@@ -38,7 +53,7 @@ pub struct ElfSegments {
 }
 
 impl ElfSegments {
-    /// Parse an ELF file and extract segments for NRO/NSO generation.
+    /// Read an AArch64 ELF and pull out its segments, BSS size, and build ID.
     ///
     /// # Errors
     ///
@@ -168,37 +183,43 @@ impl ElfSegments {
         })
     }
 
-    /// Get the text (code) segment.
+    /// The executable code, taken from the lowest-addressed `PT_LOAD` segment.
     pub fn text(&self) -> &[u8] {
         &self.text
     }
 
-    /// Get the rodata (read-only data) segment.
+    /// The read-only data, taken from the second `PT_LOAD` segment.
     pub fn rodata(&self) -> &[u8] {
         &self.rodata
     }
 
-    /// Get the data (read-write data) segment.
+    /// The writable initialized data, taken from the third `PT_LOAD` segment.
     pub fn data(&self) -> &[u8] {
         &self.data
     }
 
-    /// Get the BSS section size in bytes.
+    /// Bytes the loader must zero beyond what the file stores, rounded up to a page.
     pub fn bss_size(&self) -> u64 {
         self.bss_size
     }
 
-    /// Get the 32-byte build ID, if present.
+    /// The GNU build ID, or `None` when the ELF was linked without one.
     pub fn build_id(&self) -> Option<&[u8; 0x20]> {
         self.build_id.as_ref()
     }
 
-    /// Get the MOD0 offset relative to the start of the text segment.
+    /// Where the MOD0 header sits within `text`, or `None` when the entry stub names none.
+    ///
+    /// Read from the second word of `text`, which is where the entry stub records it. A value
+    /// falling outside the segment is reported as `None` rather than passed on.
     pub fn mod0_offset(&self) -> Option<u32> {
         self.mod0_offset
     }
 
-    /// Convert into an NroBuilder with segments pre-populated.
+    /// Hand the segments, BSS size, and build ID to an NRO builder.
+    ///
+    /// Consumes the segments rather than copying them, so the caller keeps no second copy of
+    /// the image in memory.
     pub fn into_nro_builder(self) -> NroBuilder {
         let mut builder = NroBuilder::new()
             .text(self.text)
@@ -216,7 +237,10 @@ impl ElfSegments {
         builder
     }
 
-    /// Convert into an NsoBuilder with segments pre-populated.
+    /// Hand the segments, BSS size, and build ID to an NSO builder.
+    ///
+    /// Consumes the segments rather than copying them, so the caller keeps no second copy of
+    /// the image in memory.
     pub fn into_nso_builder(self) -> NsoBuilder {
         let mut builder = NsoBuilder::new()
             .text(self.text)
@@ -234,17 +258,17 @@ impl ElfSegments {
         builder
     }
 
-    /// Get the text segment virtual address.
+    /// Address `text` is linked at, which fixes where it lands in the mapped image.
     pub fn text_vaddr(&self) -> u64 {
         self.text_vaddr
     }
 
-    /// Get the rodata segment virtual address.
+    /// Address `rodata` is linked at.
     pub fn rodata_vaddr(&self) -> u64 {
         self.rodata_vaddr
     }
 
-    /// Get the data segment virtual address.
+    /// Address `data` is linked at.
     pub fn data_vaddr(&self) -> u64 {
         self.data_vaddr
     }
@@ -292,7 +316,10 @@ pub enum ParseError {
     UnreadableSegment(u64),
 }
 
-/// Extract build ID from SHT_NOTE sections.
+/// Find the GNU build ID among the ELF's note sections.
+///
+/// A build ID shorter than the `0x20` bytes the container formats hold is zero-padded, and a
+/// longer one is truncated, since the field is fixed-width.
 fn extract_build_id(elf: &ElfFile64<Endianness>) -> Option<[u8; 0x20]> {
     for section in elf.sections() {
         if section.kind() == object::SectionKind::Note

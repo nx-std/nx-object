@@ -12,14 +12,18 @@ use zerocopy::FromBytes;
 
 use crate::raw::nso::{NSO_MAGIC, NsoFlags, NsoHeader};
 
-/// High-level NSO parser with compressed segment access.
+/// A borrowed view of an NSO image whose segment bounds have already been checked.
+///
+/// The segments it hands back are the bytes as stored, which for a compressed segment is not its
+/// contents. Expanding them and checking them against the header's hashes is the caller's, and
+/// this type deliberately does neither: it borrows, so it has nowhere to put an expanded segment.
 pub struct Nso<'a> {
     bytes: &'a [u8],
     header: &'a NsoHeader,
 }
 
 impl<'a> Nso<'a> {
-    /// Parse NSO from bytes with magic and size validation.
+    /// Validate `bytes` as an NSO and borrow it, proving each stored segment lies inside the buffer.
     ///
     /// # Errors
     ///
@@ -104,47 +108,61 @@ impl<'a> Nso<'a> {
         Ok(())
     }
 
-    /// Create from raw pointer
+    /// Read an NSO already mapped in memory, for a program inspecting its own image.
+    ///
+    /// The length is not known in advance, so the pointer is treated as the start of an
+    /// effectively unbounded slice and the header's own extents decide what is read.
     ///
     /// # Safety
-    /// - `ptr` must point to valid NSO data
-    /// - The memory must remain valid for lifetime `'a`
+    ///
+    /// - `ptr` points at a mapped NSO image, in one allocation with the segments it describes.
+    /// - That mapping stays live and unwritten for `'a`.
+    ///
+    /// # Errors
+    ///
+    /// Fails on the same conditions as [`Nso::try_from_bytes`]: a magic that is not `NSO0`, or a
+    /// segment whose stored extent overflows. A bounds failure against the end of the buffer
+    /// cannot be reported here, because the length the pointer stands for is not real.
     pub unsafe fn try_from_ptr(ptr: *const u8) -> Result<Self, FromPtrError> {
         // SAFETY: Caller guarantees ptr is valid and memory remains valid for 'a
         let bytes = unsafe { core::slice::from_raw_parts(ptr, usize::MAX / 2) };
         Self::try_from_bytes(bytes).map_err(FromPtrError)
     }
 
-    /// Get the NSO header.
+    /// The header describing the image's segments, their stored lengths, and their hashes.
     pub fn header(&self) -> &NsoHeader {
         self.header
     }
 
-    /// Get the 32-byte module ID.
+    /// Identity of the build this image was linked from.
     pub fn module_id(&self) -> &[u8; 32] {
         &self.header.module_id
     }
 
-    /// Get the NSO flags.
+    /// Which segments are stored compressed, and which the loader hash-checks.
+    ///
+    /// Bits the crate does not know are dropped rather than rejected, so an image using a flag
+    /// added after this crate was written still reads.
     pub fn flags(&self) -> NsoFlags {
         NsoFlags::from_bits_truncate(self.header.flags.get())
     }
 
-    /// Get compressed text segment bytes (raw, not decompressed)
+    /// The `text` segment as stored, still LZ4-compressed when `TEXT_COMPRESS` is set.
+    // Slicing is unchecked on purpose: `try_from_bytes` proved the stored extent fits the buffer.
     pub fn text_compressed(&self) -> &'a [u8] {
         let off = self.header.text.file_offset.get() as usize;
         let size = self.header.text_file_size.get() as usize;
         &self.bytes[off..off + size]
     }
 
-    /// Get compressed rodata segment bytes
+    /// The `rodata` segment as stored, still LZ4-compressed when `RODATA_COMPRESS` is set.
     pub fn rodata_compressed(&self) -> &'a [u8] {
         let off = self.header.rodata.file_offset.get() as usize;
         let size = self.header.rodata_file_size.get() as usize;
         &self.bytes[off..off + size]
     }
 
-    /// Get compressed data segment bytes
+    /// The `data` segment as stored, still LZ4-compressed when `DATA_COMPRESS` is set.
     pub fn data_compressed(&self) -> &'a [u8] {
         let off = self.header.data.file_offset.get() as usize;
         let size = self.header.data_file_size.get() as usize;

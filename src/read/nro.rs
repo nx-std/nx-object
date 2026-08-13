@@ -14,7 +14,11 @@ use crate::raw::nro::{
     ASSET_MAGIC, NRO_MAGIC, NroAssetHeader, NroAssetSection, NroHeader, NroStart,
 };
 
-/// High-level NRO parser with segment and asset access.
+/// A borrowed view of an NRO image whose segment and asset bounds have already been checked.
+///
+/// Construction is where every check happens, so an `Nro` that exists is one whose segments lie
+/// inside the buffer. That is what lets the accessors below return slices directly, with no
+/// `Result` and no possibility of panicking on a crafted image.
 pub struct Nro<'a> {
     bytes: &'a [u8],
     start: &'a NroStart,
@@ -23,7 +27,7 @@ pub struct Nro<'a> {
 }
 
 impl<'a> Nro<'a> {
-    /// Parse NRO from bytes with magic and size validation.
+    /// Validate `bytes` as an NRO and borrow it, proving every segment lies inside the buffer.
     ///
     /// # Errors
     ///
@@ -142,41 +146,44 @@ impl<'a> Nro<'a> {
         })
     }
 
-    /// Get the NRO start structure.
+    /// The entry stub occupying the first `0x10` bytes, which the loader jumps to.
     pub fn start(&self) -> &NroStart {
         self.start
     }
 
-    /// Get the NRO header.
+    /// The header describing the image's extent, segments, and identity.
     pub fn header(&self) -> &NroHeader {
         self.header
     }
 
-    /// Get the asset header if present.
+    /// The asset header, or `None` for a bare NRO carrying no icon, NACP, or RomFS.
     pub fn asset_header(&self) -> Option<&NroAssetHeader> {
         self.asset_header
     }
 
-    /// Get the 32-byte build ID.
+    /// Identity of the build this image was linked from.
     pub fn build_id(&self) -> &[u8; 32] {
         &self.header.build_id
     }
 
-    /// Get the text (code) segment bytes.
+    /// The executable code the loader maps.
     pub fn text_segment(&self) -> &[u8] {
         self.segment(0)
     }
 
-    /// Get the read-only data segment bytes.
+    /// The constants and dynamic linking tables the loader maps read-only.
     pub fn rodata_segment(&self) -> &[u8] {
         self.segment(1)
     }
 
-    /// Get the data segment bytes.
+    /// The writable initialized data the loader maps.
     pub fn data_segment(&self) -> &[u8] {
         self.segment(2)
     }
 
+    // Indexing and slicing are unchecked on purpose: `try_from_bytes` proved every segment's
+    // offset and size fit the buffer, and `idx` comes from the three callers above rather than
+    // from the image.
     fn segment(&self, idx: usize) -> &[u8] {
         let seg = &self.header.segments[idx];
         let off = seg.file_off.get() as usize;
@@ -184,17 +191,17 @@ impl<'a> Nro<'a> {
         &self.bytes[off..off + size]
     }
 
-    /// Get the icon asset bytes if present.
+    /// The JPEG the homebrew menu displays, or `None` when the image carries no icon.
     pub fn asset_icon(&self) -> Option<&'a [u8]> {
         self.asset_section(|h| &h.icon)
     }
 
-    /// Get the NACP asset bytes if present.
+    /// The NACP supplying title and author, or `None` when the image carries none.
     pub fn asset_nacp(&self) -> Option<&'a [u8]> {
         self.asset_section(|h| &h.nacp)
     }
 
-    /// Get the RomFS asset bytes if present.
+    /// The RomFS image the program mounts, or `None` when the image carries none.
     pub fn asset_romfs(&self) -> Option<&'a [u8]> {
         self.asset_section(|h| &h.romfs)
     }
@@ -214,11 +221,23 @@ impl<'a> Nro<'a> {
         Some(&self.bytes[off..off + size])
     }
 
-    /// Create from raw pointer (for runtime introspection of loaded module)
+    /// Read an NRO already mapped in memory, for a program inspecting its own image.
+    ///
+    /// The length is not known in advance, so the pointer is treated as the start of an
+    /// effectively unbounded slice and the header's own extents decide what is read. Every bound
+    /// the buffer would otherwise impose comes from the image itself, which is why the caller has
+    /// to guarantee the mapping really is an NRO.
     ///
     /// # Safety
-    /// - `ptr` must point to valid NRO data
-    /// - The memory must remain valid for lifetime `'a`
+    ///
+    /// - `ptr` points at a mapped NRO image, in one allocation with the segments it describes.
+    /// - That mapping stays live and unwritten for `'a`.
+    ///
+    /// # Errors
+    ///
+    /// Fails on the same conditions as [`Nro::try_from_bytes`]: a magic that is not `NRO0`, or a
+    /// segment whose offset and size overflow. A bounds failure against the end of the buffer
+    /// cannot be reported here, because the length the pointer stands for is not real.
     pub unsafe fn try_from_ptr(ptr: *const u8) -> Result<Self, FromPtrError> {
         // Create slice from pointer - we don't know size yet, use max reasonable
         // SAFETY: Caller guarantees ptr is valid and memory remains valid for 'a

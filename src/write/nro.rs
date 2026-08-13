@@ -1,4 +1,12 @@
-//! NRO (Nintendo Relocatable Object) builder.
+//! Builder for NRO images, the format the homebrew menu launches.
+//!
+//! The first `0x10` bytes are the entry stub the loader jumps to, so they are taken from the
+//! caller's `text` segment rather than synthesized: overwriting them with a header would produce an
+//! image that maps correctly and crashes on entry.
+//!
+//! Assets are appended past the end the header reports, which is why adding one does not change any
+//! segment offset, and why an NRO carrying assets and one without are the same image up to that
+//! point.
 
 use std::vec::Vec;
 
@@ -9,7 +17,10 @@ use crate::raw::{
     nro::{ASSET_MAGIC, NRO_MAGIC, NroAssetHeader, NroHeader, NroSegment},
 };
 
-/// Builder for constructing NRO files.
+/// Assembles an entry stub, three segments, and an optional asset section into an NRO image.
+///
+/// The asset section is written only when at least one asset is supplied, so a builder given
+/// none produces a bare NRO rather than an empty asset header.
 pub struct NroBuilder {
     text: Option<Vec<u8>>,
     text_vaddr: u32,
@@ -26,7 +37,7 @@ pub struct NroBuilder {
 }
 
 impl NroBuilder {
-    /// Create a new NRO builder.
+    /// Start an image with no segments, no build ID, and no assets.
     pub fn new() -> Self {
         Self {
             text: None,
@@ -44,49 +55,51 @@ impl NroBuilder {
         }
     }
 
-    /// Set the text (code) segment.
+    /// Supply the executable code the loader maps.
     pub fn text(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.text = Some(data.into());
         self
     }
 
-    /// Set the text segment's ELF virtual address.
+    /// Record where the linker placed `text`, which fixes the segment's offset in the image.
     pub fn text_vaddr(mut self, vaddr: u32) -> Self {
         self.text_vaddr = vaddr;
         self
     }
 
-    /// Set the rodata (read-only data) segment.
+    /// Supply the constants and linking tables the loader maps read-only.
     pub fn rodata(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.rodata = Some(data.into());
         self
     }
 
-    /// Set the rodata segment's ELF virtual address.
+    /// Record where the linker placed `rodata`, which fixes the segment's offset in the image.
     pub fn rodata_vaddr(mut self, vaddr: u32) -> Self {
         self.rodata_vaddr = vaddr;
         self
     }
 
-    /// Set the data (read-write data) segment.
+    /// Supply the writable initialized data the loader maps.
     pub fn data(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.data = Some(data.into());
         self
     }
 
-    /// Set the data segment's ELF virtual address.
+    /// Record where the linker placed `data`, which fixes the segment's offset in the image.
     pub fn data_vaddr(mut self, vaddr: u32) -> Self {
         self.data_vaddr = vaddr;
         self
     }
 
-    /// Set the BSS section size in bytes.
+    /// Ask the loader to reserve and zero `size` bytes after `data`, at no cost in the file.
     pub fn bss_size(mut self, size: u32) -> Self {
         self.bss_size = size;
         self
     }
 
-    /// Set the 32-byte build ID.
+    /// Record the identity of the build this image was linked from.
+    ///
+    /// Left zeroed unless set, which produces an image a crash report cannot be traced back to.
     ///
     /// If not provided, will default to all zeros.
     pub fn build_id(mut self, id: BuildId) -> Self {
@@ -94,7 +107,7 @@ impl NroBuilder {
         self
     }
 
-    /// Set the NRO flags field.
+    /// Set the header's loader flags, which no bit is defined for in a homebrew NRO.
     ///
     /// Bit 0: Aligned header layout (0x1)
     pub fn flags(mut self, flags: u32) -> Self {
@@ -102,25 +115,25 @@ impl NroBuilder {
         self
     }
 
-    /// Add an icon asset (JPEG image).
+    /// Attach the JPEG the homebrew menu displays for this title.
     pub fn asset_icon(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.icon = Some(data.into());
         self
     }
 
-    /// Add a NACP (Nintendo Application Control Property) asset.
+    /// Attach the NACP supplying the title and author the menu displays.
     pub fn asset_nacp(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.nacp = Some(data.into());
         self
     }
 
-    /// Add a RomFS asset.
+    /// Attach the RomFS image the running program mounts as its filesystem.
     pub fn asset_romfs(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.romfs = Some(data.into());
         self
     }
 
-    /// Build the complete NRO file.
+    /// Lay out the segments and assets and return the finished image.
     ///
     /// # Errors
     ///

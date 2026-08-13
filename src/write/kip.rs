@@ -17,7 +17,10 @@ use crate::{
     raw::kip::{KIP1_MAGIC, Kip1Header, Kip1Segment},
 };
 
-/// Builder for constructing KIP1 files.
+/// Assembles a header, four segments, and a capability block into a KIP1 image.
+///
+/// Segments are BLZ-compressed as they are laid out, and each one's compression bit is written
+/// to match, so the kernel expands exactly what was compressed.
 pub struct Kip1Builder {
     name: Option<String>,
     title_id: u64,
@@ -38,7 +41,7 @@ pub struct Kip1Builder {
 }
 
 impl Kip1Builder {
-    /// Create a new KIP1 builder.
+    /// Start an image with no segments, no capabilities, and a zeroed header.
     pub fn new() -> Self {
         Self {
             name: None,
@@ -60,37 +63,39 @@ impl Kip1Builder {
         }
     }
 
-    /// Set the process name (up to 12 bytes, null-terminated).
+    /// Name the process, truncated to the 12 bytes the header holds.
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
-    /// Set the title ID.
+    /// Set the title ID the process runs under.
     pub fn title_id(mut self, id: u64) -> Self {
         self.title_id = id;
         self
     }
 
-    /// Set the process category.
+    /// Set the category deciding how the kernel privileges and schedules the process.
     pub fn process_category(mut self, category: u32) -> Self {
         self.process_category = category;
         self
     }
 
-    /// Set the main thread priority (0-63).
+    /// Set the priority the main thread starts at, lower being more favourable.
     pub fn main_thread_priority(mut self, priority: u8) -> Self {
         self.main_thread_priority = priority;
         self
     }
 
-    /// Set the default CPU core ID.
+    /// Choose the core the main thread is scheduled on by default.
     pub fn default_cpu_id(mut self, cpu_id: u8) -> Self {
         self.default_cpu_id = cpu_id;
         self
     }
 
-    /// Set the flags byte manually.
+    /// Write the flags byte directly, overriding the compression bits the builder derives.
+    ///
+    /// The bits describing address-space shape have no other setter, which is what this is for.
     ///
     /// - Bit 0-2: Compression flags (text, rodata, data)
     /// - Bit 3: Is64Bit
@@ -110,43 +115,43 @@ impl Kip1Builder {
         self
     }
 
-    /// Set the text (code) segment.
+    /// Supply the executable code the kernel maps.
     pub fn text(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.text = Some(data.into());
         self
     }
 
-    /// Set the text segment's virtual address.
+    /// Place `text` at this address, relative to the process image base.
     pub fn text_vaddr(mut self, vaddr: u32) -> Self {
         self.text_vaddr = vaddr;
         self
     }
 
-    /// Set the rodata (read-only data) segment.
+    /// Supply the constants the kernel maps read-only.
     pub fn rodata(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.rodata = Some(data.into());
         self
     }
 
-    /// Set the rodata segment's virtual address.
+    /// Place `rodata` at this address, relative to the process image base.
     pub fn rodata_vaddr(mut self, vaddr: u32) -> Self {
         self.rodata_vaddr = vaddr;
         self
     }
 
-    /// Set the rodata segment attributes (e.g., main thread stack size).
+    /// Set the `rodata` descriptor's attribute word, which carries the main thread's stack size.
     pub fn rodata_attributes(mut self, attributes: u32) -> Self {
         self.rodata_attributes = attributes;
         self
     }
 
-    /// Set the data (read-write data) segment.
+    /// Supply the writable initialized data the kernel maps.
     pub fn data(mut self, data: impl Into<Vec<u8>>) -> Self {
         self.data = Some(data.into());
         self
     }
 
-    /// Set the data segment's virtual address.
+    /// Place `data` at this address, relative to the process image base.
     pub fn data_vaddr(mut self, vaddr: u32) -> Self {
         self.data_vaddr = vaddr;
         self
@@ -170,7 +175,9 @@ impl Kip1Builder {
         self
     }
 
-    /// Add kernel capability descriptors (pre-encoded).
+    /// Append already-encoded capability descriptors granting syscalls, memory, or interrupts.
+    ///
+    /// The words are written as given; the builder does not check that they encode anything valid.
     ///
     /// Each u32 value should be an encoded kernel capability descriptor.
     /// See `write::npdm::KernelCapability::encode()` for encoding helpers.
@@ -179,7 +186,7 @@ impl Kip1Builder {
         self
     }
 
-    /// Build the complete KIP1 file.
+    /// Compress the segments, fill in the header, and return the finished image.
     ///
     /// # Errors
     ///

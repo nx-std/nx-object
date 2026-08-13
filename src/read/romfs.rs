@@ -12,7 +12,15 @@ use zerocopy::FromBytes;
 
 use crate::raw::romfs::{RomFsDirEntry, RomFsFileEntry, RomFsHeader};
 
-/// High-level RomFS parser with filesystem navigation.
+/// A borrowed view of a RomFS image, with its four tables proven to lie inside the buffer.
+///
+/// Construction checks the tables; the entries inside them are checked as they are walked, because
+/// validating every entry up front would mean reading the whole tree to open one file. A traversal
+/// can therefore still fail on a malformed image, and the error says so rather than reporting the
+/// path as absent.
+///
+/// The format carries no magic, so a buffer that passes the header checks parses whether or not it
+/// is a RomFS.
 pub struct RomFs<'a> {
     bytes: &'a [u8],
     header: &'a RomFsHeader,
@@ -133,12 +141,12 @@ impl<'a> RomFs<'a> {
         Ok(Self { bytes, header })
     }
 
-    /// Get the RomFS header.
+    /// The header locating the image's four tables and its data region.
     pub fn header(&self) -> &RomFsHeader {
         self.header
     }
 
-    /// Get root directory
+    /// The directory every path is resolved from.
     ///
     /// # Errors
     ///
@@ -151,7 +159,10 @@ impl<'a> RomFs<'a> {
         RomFsDir::from_offset_for_root(self, 0, dir_table_offset)
     }
 
-    /// Open a file by path (e.g., "/config.json")
+    /// Resolve a slash-separated path from the root, such as `/config.json`.
+    ///
+    /// Traversal walks the sibling chains rather than the hash tables, so cost is linear in the
+    /// number of entries in each directory along the path.
     ///
     /// # Errors
     ///
@@ -213,7 +224,7 @@ impl<'a> RomFs<'a> {
     }
 }
 
-/// RomFS directory handle with child iteration.
+/// One directory in the tree, positioned to walk its children.
 pub struct RomFsDir<'a> {
     romfs: &'a RomFs<'a>,
     entry: &'a RomFsDirEntry,
@@ -307,7 +318,10 @@ impl<'a> RomFsDir<'a> {
         Ok(Self { romfs, entry, name })
     }
 
-    /// Get the directory name.
+    /// This directory's own name, empty for the root, which has none.
+    ///
+    /// A name that is not valid UTF-8 reads as empty rather than failing, so a malformed entry
+    /// cannot match a lookup.
     pub fn name(&self) -> &str {
         self.name
     }
@@ -344,7 +358,10 @@ impl<'a> RomFsDir<'a> {
         Err(OpenError::FileNotFound)
     }
 
-    /// Iterate through all entries (directories and files)
+    /// Walk this directory's immediate children: every subdirectory first, then every file.
+    ///
+    /// The iterator does not recurse, and it stops at the first malformed entry rather than
+    /// reporting it, since [`Iterator::next`] has nowhere to put an error.
     pub fn entries(&self) -> DirIterator<'a> {
         DirIterator {
             romfs: self.romfs,
@@ -356,7 +373,10 @@ impl<'a> RomFsDir<'a> {
     }
 }
 
-/// RomFS file handle with data access.
+/// One file in the tree, holding its bounds rather than its bytes.
+///
+/// Reading the contents is a separate, fallible step: the entry's data bounds are checked against
+/// the image at that point, not when the file was found.
 pub struct RomFsFile<'a> {
     romfs: &'a RomFs<'a>,
     entry: &'a RomFsFileEntry,
@@ -408,23 +428,26 @@ impl<'a> RomFsFile<'a> {
         Ok(Self { romfs, entry, name })
     }
 
-    /// Get the file name.
+    /// This file's name, without any directory component.
+    ///
+    /// A name that is not valid UTF-8 reads as empty rather than failing, so a malformed entry
+    /// cannot match a lookup.
     pub fn name(&self) -> &str {
         self.name
     }
 
-    /// Get the file size in bytes.
+    /// The length the entry claims, in bytes, which reading the contents may still contradict.
     pub fn size(&self) -> usize {
         self.entry.data_size.get() as usize
     }
 
-    /// Get the file contents.
+    /// The file's bytes, borrowed from the image.
     ///
     /// # Errors
     ///
-    /// Returns an error if file data offset+size is out of bounds. This indicates a malformed
-    /// RomFS where the file metadata table contains invalid data offsets that were not validated
-    /// during initial parsing (as they are lazily accessed during filesystem traversal).
+    /// Fails when the entry's data bounds fall outside the image, which means the entry is
+    /// malformed rather than the file absent. Entries are checked here rather than at parse time,
+    /// because proving every one up front would mean walking the whole tree to open one file.
     pub fn data(&self) -> Result<&'a [u8], FromBytesError> {
         let offset = self.entry.data_offset.get() as usize;
         let size = self.entry.data_size.get() as usize;
@@ -460,15 +483,22 @@ impl<'a> RomFsFile<'a> {
     }
 }
 
-/// Directory entry (either a file or subdirectory).
+/// What a directory walk yields: the two kinds of child an entry can be.
 pub enum RomFsEntry<'a> {
-    /// File entry
+    /// A file, whose contents are read separately.
     File(RomFsFile<'a>),
-    /// Directory entry
+    /// A subdirectory, which can be walked in turn.
     Dir(RomFsDir<'a>),
 }
 
-/// Iterator over directory entries (subdirectories then files).
+/// Walks one directory's children, subdirectories first and files after.
+///
+/// The order is an artefact of the format storing the two in separate chains, not a sort: within
+/// each kind, entries come in the order the image chains them.
+///
+/// Iteration ends at a malformed entry as though the directory had ended there, because
+/// [`Iterator::next`] cannot report why it stopped. A caller that needs to tell a short directory
+/// from a corrupt one resolves the entries by name instead.
 pub struct DirIterator<'a> {
     romfs: &'a RomFs<'a>,
     next_dir_offset: u32,

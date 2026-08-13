@@ -1,4 +1,11 @@
-//! PFS0 (Partition FileSystem) builder.
+//! Builder for PFS0 archives, the flat container an NSP is built from.
+//!
+//! Every name is checked when the file is added rather than when the archive is written, which is
+//! what makes [`Pfs0Builder::build`] infallible: by then nothing can be wrong with the entries.
+//!
+//! The four regions are laid out from the counts alone, so the string table's padding to a
+//! `0x20`-byte boundary is written even though nothing reads it: the data region begins where the
+//! header's `string_table_size` says it does, and a table shorter than it claims moves every file.
 
 use std::{path::PathBuf, string::String, vec::Vec};
 
@@ -12,18 +19,22 @@ struct FileEntry {
     data: Vec<u8>,
 }
 
-/// Builder for constructing PFS0 filesystem images.
+/// Accumulates named files and lays them out as a PFS0 archive.
+///
+/// The archive is flat: names may contain no directory separator, since the format has no
+/// directories to put one in. Entries are sorted by name when the archive is built, so the same
+/// set of files always produces the same bytes.
 pub struct Pfs0Builder {
     files: Vec<FileEntry>,
 }
 
 impl Pfs0Builder {
-    /// Create a new PFS0 builder.
+    /// Start an archive holding no files.
     pub fn new() -> Self {
         Self { files: Vec::new() }
     }
 
-    /// Create a PFS0 archive from a directory.
+    /// Add every file directly inside `dir`, without descending into subdirectories.
     ///
     /// Reads all regular files in the directory (non-recursively). Subdirectories
     /// are skipped. Files are sorted alphabetically by name for deterministic output.
@@ -95,7 +106,7 @@ impl Pfs0Builder {
         Ok(builder)
     }
 
-    /// Add a file to the PFS0 archive.
+    /// Store `data` under `name`, which the archive keeps as a flat entry.
     ///
     /// Files are stored in the order they are added, but will be sorted
     /// alphabetically by name when the archive is built.
@@ -142,7 +153,7 @@ impl Pfs0Builder {
         Ok(self)
     }
 
-    /// Build the PFS0 archive, returning the complete binary buffer.
+    /// Sort the entries, lay out the tables and data, and return the finished archive.
     ///
     /// Files are sorted alphabetically by name before being written to the archive.
     ///
@@ -271,6 +282,7 @@ pub enum FromDirectoryError {
     Io {
         /// Path that was being read when the I/O error occurred.
         path: PathBuf,
+        /// The failure the filesystem reported.
         #[source]
         source: std::io::Error,
     },

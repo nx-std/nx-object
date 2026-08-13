@@ -10,23 +10,29 @@
 use static_assertions::const_assert_eq;
 use zerocopy::little_endian::{U32, U64};
 
-/// KIP1 magic number: "KIP1" in ASCII (0x3150494b).
+/// Magic identifying a KIP1 header: `KIP1`, little-endian, at offset zero.
 pub const KIP1_MAGIC: u32 = 0x3150494b;
 
-/// KIP1 segment descriptor (text, rodata, data, or bss).
+/// Where one segment lands in memory, how large it is stored and expanded, and what it carries.
 ///
-/// Describes location, size, and attributes of a segment within the KIP file.
-/// KIP segments can be BLZ-compressed.
+/// Both lengths are present because the kernel decompresses BLZ segments in place: it needs the
+/// stored length to find the compressed bytes and the final length to know how much room to leave.
+/// When the segment's compression bit in [`Kip1Header::flags`] is clear, the two are equal.
+///
+/// See <https://switchbrew.org/wiki/KIP#Segment_Header>.
 #[derive(Debug, Clone, Copy, zerocopy::FromZeros, zerocopy::IntoBytes, zerocopy::Immutable)]
 #[repr(C)]
 pub struct Kip1Segment {
-    /// Destination address in memory
+    /// Address the segment is loaded at, relative to the process image base.
     pub dst_addr: U32,
-    /// Decompressed size in bytes
+    /// Length of the segment once decompressed, in bytes.
     pub decomp_size: U32,
-    /// Compressed size in bytes (if compression enabled, otherwise equals decomp_size)
+    /// Length of the segment as stored in the file, in bytes.
     pub comp_size: U32,
-    /// Segment attributes (e.g., main thread stack size for rodata segment)
+    /// Meaning depends on the segment: for `rodata` it is the main thread's stack size, in bytes.
+    ///
+    /// The field is positional rather than typed, so a value read here is only meaningful once the
+    /// segment it belongs to is known.
     pub attributes: U32,
 }
 
@@ -34,38 +40,42 @@ pub struct Kip1Segment {
 const_assert_eq!(size_of::<Kip1Segment>(), 0x10);
 const_assert_eq!(align_of::<Kip1Segment>(), 0x1);
 
-/// KIP1 header (0x100 bytes).
+/// Everything the kernel needs to start an initial process: its identity, its segments, and the
+/// capabilities it is granted.
 ///
-/// Contains metadata, segment descriptors, and kernel capabilities for a kernel
-/// initial process.
+/// Occupies the first `0x100` bytes of the file. A KIP is launched by the kernel before any
+/// filesystem exists, so the header carries what a loader would otherwise read from an NPDM.
 ///
-/// See: <https://switchbrew.org/wiki/KIP>
+/// See <https://switchbrew.org/wiki/KIP#KIP_Header>.
 #[derive(Debug, Clone, Copy, zerocopy::FromZeros, zerocopy::IntoBytes, zerocopy::Immutable)]
 #[repr(C)]
 pub struct Kip1Header {
-    /// Magic number (must be [`KIP1_MAGIC`])
+    /// Always [`KIP1_MAGIC`]; anything else means this is not a KIP1.
     pub magic: U32,
-    /// Process name (12 bytes, null-terminated)
+    /// Process name, NUL-padded to 12 bytes. A 12-character name has no terminator.
     pub name: [u8; 12],
-    /// Title ID
+    /// Title ID the process runs under.
     pub title_id: U64,
-    /// Process category
+    /// Process category, which decides how the kernel schedules and privileges the process.
     pub process_category: U32,
-    /// Main thread priority
+    /// Priority the main thread starts at, lower being more favourable.
     pub main_thread_priority: u8,
-    /// Default CPU core ID
+    /// Core the main thread is scheduled on by default.
     pub default_cpu_id: u8,
-    /// Reserved (must be 0)
     _reserved: u8,
-    /// Flags byte:
-    /// - Bit 0-2: Compression flags (text, rodata, data)
-    /// - Bit 3: Is64Bit
-    /// - Bit 4: IsAddrSpace32Bit
-    /// - Bit 5: UseSystemPoolPartition
+    /// Compression bits for the first three segments, and the process's address-space shape.
+    ///
+    /// Bits `0`, `1`, and `2` mark `text`, `rodata`, and `data` as BLZ-compressed; bit `3` selects
+    /// a 64-bit process, bit `4` a 32-bit address space, and bit `5` the system pool partition.
+    /// Clearing a compression bit without rewriting its segment leaves the kernel expanding bytes
+    /// that are already expanded.
     pub flags: u8,
-    /// Array of segment descriptors: [text, rodata, data, bss, reserved, reserved]
+    /// The `text`, `rodata`, `data`, and `bss` segments, followed by two unused descriptors.
     pub segments: [Kip1Segment; 6],
-    /// Kernel capability descriptors (0x80 bytes = 32 u32 values)
+    /// Kernel capability descriptors, `0x20` packed `u32` values.
+    ///
+    /// These are the syscalls, memory regions, and interrupts the process is permitted; an
+    /// unused slot is filled with `0xFFFFFFFF`.
     pub capabilities: [u8; 0x80],
 }
 

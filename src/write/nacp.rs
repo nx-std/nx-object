@@ -1,10 +1,19 @@
-//! NACP (Nintendo Application Control Property) builder.
+//! Builder for the NACP control structure a title is presented by.
+//!
+//! The structure has no length and no magic: it is always `0x4000` bytes, so building one means
+//! filling fields at fixed offsets in a zeroed buffer rather than appending. A field left unset is
+//! therefore written as zero, which the console reads as absent.
+//!
+//! Titles are held per language until the structure is built, because a name set for all languages
+//! and a name set for one have to compose, and the last writer for a given language wins.
 
 use std::{string::String, vec::Vec};
 
 use crate::{raw::nacp::NacpStruct, read::SetLanguage};
 
-/// Builder for constructing NACP files.
+/// Fills in the fixed `0x4000`-byte control structure a title is described by.
+///
+/// Every field starts zeroed, so an unset field is written as absent rather than defaulted.
 pub struct NacpBuilder {
     names: [Option<String>; 16],
     authors: [Option<String>; 16],
@@ -16,7 +25,7 @@ pub struct NacpBuilder {
 }
 
 impl NacpBuilder {
-    /// Create a new NACP builder with default values.
+    /// Start a control structure with every field zeroed.
     pub fn new() -> Self {
         Self {
             names: Default::default(),
@@ -29,7 +38,7 @@ impl NacpBuilder {
         }
     }
 
-    /// Set the application name for all languages.
+    /// Give every language the same title, for a release not localized per language.
     pub fn name(mut self, name: impl Into<String>) -> Self {
         let name = name.into();
         for entry in &mut self.names {
@@ -38,7 +47,7 @@ impl NacpBuilder {
         self
     }
 
-    /// Set the application name for a specific language.
+    /// Give one language its own title, overriding what was set for all of them.
     pub fn name_for_language(mut self, lang: SetLanguage, name: impl Into<String>) -> Self {
         if let Some(idx) = language_to_index(lang) {
             self.names[idx] = Some(name.into());
@@ -46,7 +55,7 @@ impl NacpBuilder {
         self
     }
 
-    /// Set the author/publisher for all languages.
+    /// Give every language the same publisher.
     pub fn author(mut self, author: impl Into<String>) -> Self {
         let author = author.into();
         for entry in &mut self.authors {
@@ -55,7 +64,7 @@ impl NacpBuilder {
         self
     }
 
-    /// Set the author/publisher for a specific language.
+    /// Give one language its own publisher, overriding what was set for all of them.
     pub fn author_for_language(mut self, lang: SetLanguage, author: impl Into<String>) -> Self {
         if let Some(idx) = language_to_index(lang) {
             self.authors[idx] = Some(author.into());
@@ -63,37 +72,37 @@ impl NacpBuilder {
         self
     }
 
-    /// Set the display version string (shown in UI).
+    /// Set the version shown to the user, such as `1.0.0`, which the system never parses.
     pub fn version(mut self, version: impl Into<String>) -> Self {
         self.display_version = Some(version.into());
         self
     }
 
-    /// Set the application ID.
+    /// Set the title ID this NACP describes.
     pub fn application_id(mut self, id: u64) -> Self {
         self.application_id = Some(id);
         self
     }
 
-    /// Set the save data owner ID.
+    /// Set the title ID owning the save data, which lets a title read a predecessor's saves.
     pub fn save_data_owner_id(mut self, id: u64) -> Self {
         self.save_data_owner_id = Some(id);
         self
     }
 
-    /// Set the user account save data size in bytes.
+    /// Reserve per-account save data, in bytes; `0` gives the title no account saves.
     pub fn user_account_save_data_size(mut self, size: u64) -> Self {
         self.user_account_save_data_size = Some(size);
         self
     }
 
-    /// Set the user account save data journal size in bytes.
+    /// Reserve the journal bounding one save transaction's writes, in bytes.
     pub fn user_account_save_data_journal_size(mut self, size: u64) -> Self {
         self.user_account_save_data_journal_size = Some(size);
         self
     }
 
-    /// Build the NACP structure, returning the complete 0x4000-byte buffer.
+    /// Return the finished control structure, zero-filled wherever nothing was set.
     ///
     /// # Errors
     ///

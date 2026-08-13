@@ -14,23 +14,28 @@ use zerocopy::{
     little_endian::{U32, U64},
 };
 
-/// NRO magic number: "NRO0" in ASCII (0x304f524e).
+/// Magic identifying an NRO header: `NRO0`, little-endian.
+///
+/// It sits at offset `0x10`, not at the start of the file, because [`NroStart`] comes first.
 pub const NRO_MAGIC: u32 = 0x304f524e;
 
-/// ASET magic number: "ASET" in ASCII (0x54455341).
+/// Magic identifying the asset header appended past the end of an NRO: `ASET`, little-endian.
 ///
-/// Used in the asset header appended to NRO files.
+/// Its presence at [`NroHeader::size`] is what distinguishes an NRO carrying assets from a bare one.
 pub const ASSET_MAGIC: u32 = 0x54455341;
 
-/// NRO segment descriptor (text, rodata, or data).
+/// Where one loadable segment sits in the file, and how far it extends.
 ///
-/// Describes location and size of a loaded segment within the NRO file.
+/// The three segments of an NRO appear in [`NroHeader::segments`] in load order: `text`, `rodata`, `data`.
+/// Each is mapped with its own permissions, so a segment's bounds decide which pages are executable.
+///
+/// See <https://switchbrew.org/wiki/NRO#Segments>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NroSegment {
-    /// File offset to segment data
+    /// Offset of the segment's first byte, from the start of the file.
     pub file_off: U32,
-    /// Size of segment in bytes
+    /// Length of the segment in bytes.
     pub size: U32,
 }
 
@@ -38,17 +43,23 @@ pub struct NroSegment {
 const_assert_eq!(size_of::<NroSegment>(), 0x8);
 const_assert_eq!(align_of::<NroSegment>(), 0x1);
 
-/// NRO start header (first 0x10 bytes of NRO file).
+/// The first `0x10` bytes of an NRO, which the loader enters before any header is read.
 ///
-/// Contains branch instruction and offset to MOD0 header.
+/// The console jumps to offset zero, so the file opens with executable code rather than a magic.
+/// A homebrew NRO puts its crt0 branch here; preserving those bytes is what keeps an NRO
+/// launchable after a rewrite.
+///
+/// See <https://switchbrew.org/wiki/NRO#Start>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NroStart {
-    /// Unused (typically branch instruction in actual NRO)
+    /// The instruction the loader enters at, in a homebrew NRO a branch past this header.
+    ///
+    /// Named for the role the format assigns it, which is none: the loader neither reads nor
+    /// requires it, and only the entry stub gives it meaning.
     pub unused: U32,
-    /// Offset to MOD0 header (relative to NRO start)
+    /// Offset of the MOD0 header, from the start of the file.
     pub mod_offset: U32,
-    /// Padding
     _padding: [u8; 8],
 }
 
@@ -56,31 +67,37 @@ pub struct NroStart {
 const_assert_eq!(size_of::<NroStart>(), 0x10);
 const_assert_eq!(align_of::<NroStart>(), 0x1);
 
-/// NRO header (0x70 bytes, follows NroStart at offset 0x10).
+/// Everything the loader needs to map an NRO: its extent, its segments, and its identity.
 ///
-/// Contains segment descriptors, build ID, and metadata about the NRO file.
+/// Sits at offset `0x10`, immediately after [`NroStart`].
 ///
-/// See: <https://switchbrew.org/wiki/NRO>
+/// See <https://switchbrew.org/wiki/NRO#Header>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NroHeader {
-    /// Magic number (must be [`NRO_MAGIC`])
+    /// Always [`NRO_MAGIC`]; anything else means this is not an NRO.
     pub magic: U32,
-    /// Format version (usually 0)
+    /// Format revision. Every NRO in circulation carries `0`.
     pub version: U32,
-    /// Total size of NRO file (excluding assets)
+    /// Length of the NRO proper, in bytes, which is also the offset any asset section starts at.
+    ///
+    /// Assets are appended past this point and are not counted here, so this is the file's length
+    /// only for an NRO without them.
     pub size: U32,
-    /// Flags
+    /// Loader flags. No bit is defined for the homebrew NROs this crate writes, so it is `0`.
     pub flags: U32,
-    /// Array of 3 segment descriptors: [text, rodata, data]
+    /// The `text`, `rodata`, and `data` segments, in that order and in load order.
     pub segments: [NroSegment; 3],
-    /// BSS section size in bytes
+    /// Length of the zero-initialized region the loader appends after `data`, in bytes.
+    ///
+    /// The bytes are not stored in the file: this asks the loader to reserve and zero them.
     pub bss_size: U32,
-    /// Reserved
     _reserved: U32,
-    /// 32-byte build ID
+    /// Identity of the linked binary, taken from the ELF build ID and zero-padded to `0x20` bytes.
+    ///
+    /// The console reports it on a crash, which is what makes it the link back to the build that
+    /// produced the image.
     pub build_id: [u8; 0x20],
-    /// Reserved
     _reserved2: [u8; 0x20],
 }
 
@@ -88,15 +105,19 @@ pub struct NroHeader {
 const_assert_eq!(size_of::<NroHeader>(), 0x70);
 const_assert_eq!(align_of::<NroHeader>(), 0x1);
 
-/// NRO asset section descriptor.
+/// Where one asset sits within the asset section, and how far it extends.
 ///
-/// Describes location and size of an asset (icon, NACP, or RomFS) appended to the NRO.
+/// A zero `size` means the asset is absent, which is how an NRO carries an icon but no RomFS.
+///
+/// See <https://switchbrew.org/wiki/NRO#AssetSection>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NroAssetSection {
-    /// Offset to asset data (relative to asset header)
+    /// Offset of the asset's first byte, from the start of [`NroAssetHeader`].
+    ///
+    /// Relative to the asset header, not to the file, so it survives the NRO growing in front of it.
     pub offset: U64,
-    /// Size of asset data in bytes
+    /// Length of the asset in bytes, or `0` when the asset is absent.
     pub size: U64,
 }
 
@@ -104,24 +125,25 @@ pub struct NroAssetSection {
 const_assert_eq!(size_of::<NroAssetSection>(), 0x10);
 const_assert_eq!(align_of::<NroAssetSection>(), 0x1);
 
-/// NRO asset header (appended after NRO file data).
+/// The header of the asset section, carrying the homebrew menu's icon, metadata, and filesystem.
 ///
-/// Contains descriptors for optional assets: icon, NACP, and RomFS.
-/// This header is located immediately after the main NRO data.
+/// Begins at [`NroHeader::size`], past the end of the NRO the loader maps. The console ignores
+/// everything here; it exists for the homebrew menu, which reads the icon and NACP to display an
+/// entry and hands the RomFS to the running program.
 ///
-/// See: <https://switchbrew.org/wiki/NRO#AssetHeader>
+/// See <https://switchbrew.org/wiki/NRO#AssetHeader>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NroAssetHeader {
-    /// Magic number (must be `ASSET_MAGIC`)
+    /// Always [`ASSET_MAGIC`]; anything else means no asset section is present.
     pub magic: U32,
-    /// Asset format version
+    /// Asset format revision. Every asset section this crate reads or writes carries `0`.
     pub version: U32,
-    /// Icon asset descriptor (JPEG image)
+    /// The JPEG shown as the title's icon in the homebrew menu.
     pub icon: NroAssetSection,
-    /// NACP asset descriptor
+    /// The NACP supplying the title, author, and version the menu displays.
     pub nacp: NroAssetSection,
-    /// RomFS asset descriptor
+    /// The RomFS image the running program mounts as its read-only filesystem.
     pub romfs: NroAssetSection,
 }
 

@@ -1,7 +1,19 @@
-//! High-level parsing wrappers for Nintendo Switch executable formats.
+//! Readers that validate an image once, then hand out its parts without re-checking.
 //!
-//! This module provides safe, validated parsing interfaces over the raw binary structures.
-//! Each parser validates magic numbers, sizes, and provides convenient accessor methods.
+//! Every type here borrows the buffer it was given rather than copying it, and every check happens
+//! at construction. That is the invariant the module upholds and the reason its accessors return
+//! plain slices instead of `Result`: a reader that exists is one whose bounds have been proven, so
+//! a crafted image fails at the door rather than panicking three calls later.
+//!
+//! Two things deliberately fall outside it. Bounds that cannot be checked without reading the whole
+//! image are checked on use instead, which is why walking a RomFS entry is fallible while reading an
+//! NRO segment is not. And a format with no magic, NACP and RomFS among them, cannot be recognized
+//! at all: those readers check lengths and layout, so success means the buffer is shaped like the
+//! format, never that it is one.
+//!
+//! Nothing here decompresses or verifies a hash. An NSO segment comes back as stored, and checking
+//! it against the header's digest is the caller's, because a borrowing reader has nowhere to put
+//! the expanded bytes.
 
 mod mod0;
 mod nacp;

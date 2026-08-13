@@ -10,30 +10,38 @@ use zerocopy::{
     little_endian::{I32, U32},
 };
 
-/// MOD0 magic number: "MOD0" in ASCII (0x30444f4d).
+/// Magic identifying a MOD0 header: `MOD0`, little-endian.
 pub const MOD0_MAGIC: u32 = 0x30444f4d;
 
-/// MOD0 header structure embedded in NRO/NSO executables.
+/// What the runtime needs to relocate itself: the dynamic section, the BSS bounds, and the
+/// unwind tables.
 ///
-/// The MOD0 header provides metadata about the module's dynamic linking
-/// information, BSS section, and exception handling tables. The header
-/// location is specified in the NRO start header.
+/// The header is embedded in the `text` segment of an NRO or NSO rather than stored beside it, and
+/// [`NroStart::mod_offset`] is what locates it. Every offset it holds is signed and measured from
+/// the header's own address, so a section placed before the header is reached through a negative
+/// value.
+///
+/// [`NroStart::mod_offset`]: crate::raw::nro::NroStart::mod_offset
+///
+/// See <https://switchbrew.org/wiki/NRO#MOD>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct Mod0Header {
-    /// Magic number (must be [`MOD0_MAGIC`])
+    /// Always [`MOD0_MAGIC`]; anything else means the offset did not point at a MOD0 header.
     pub magic: U32,
-    /// Offset to .dynamic section (relative to MOD0 base)
+    /// Offset of the `.dynamic` section, from this header's address.
     pub dynamic_offset: I32,
-    /// Offset to BSS start (relative to MOD0 base)
+    /// Offset of the first byte of BSS, from this header's address.
     pub bss_start_offset: I32,
-    /// Offset to BSS end (relative to MOD0 base)
+    /// Offset one past the last byte of BSS, from this header's address.
+    ///
+    /// The runtime zeroes the half-open range between the two BSS offsets on startup.
     pub bss_end_offset: I32,
-    /// Offset to .eh_frame_hdr start (relative to MOD0 base)
+    /// Offset of the first byte of `.eh_frame_hdr`, from this header's address.
     pub eh_frame_hdr_start: I32,
-    /// Offset to .eh_frame_hdr end (relative to MOD0 base)
+    /// Offset one past the last byte of `.eh_frame_hdr`, from this header's address.
     pub eh_frame_hdr_end: I32,
-    /// Offset to module object (relative to MOD0 base)
+    /// Offset of the runtime's module object, from this header's address.
     pub module_object_offset: I32,
 }
 

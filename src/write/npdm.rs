@@ -297,22 +297,26 @@ pub struct SaveDataOwnerId {
     pub id: u64,
 }
 
-/// Filesystem access control.
+/// Which filesystem content and save data a program may reach.
 ///
-/// Specifies which filesystem content and save data the application can access.
+/// The same structure serves both NPDM sections, which is why the lists and the ranges coexist: the
+/// ACI0 block is written from the explicit lists, and the ACID block from the ranges. A field
+/// belonging to the other section is ignored rather than rejected.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilesystemAccess {
-    /// Filesystem permission bitmask
+    /// Filesystem operations the program is permitted, as a bitmask.
     pub permissions: u64,
-    /// Content owner IDs array (for ACI0/FAH section)
+    /// Content the program may reach, listed individually. Written to the ACI0 block.
     pub content_owner_ids: Vec<u64>,
-    /// Save data owner IDs array (for ACI0/FAH section)
+    /// Save data the program may reach, listed individually. Written to the ACI0 block.
     pub save_data_owner_ids: Vec<SaveDataOwnerId>,
-    /// Content owner ID range (for ACID/FAC section)
+    /// Lowest content owner ID the descriptor permits. Written to the ACID block.
     pub content_owner_id_min: u64,
+    /// Highest content owner ID the descriptor permits. Written to the ACID block.
     pub content_owner_id_max: u64,
-    /// Save data owner ID range (for ACID/FAC section)
+    /// Lowest save data owner ID the descriptor permits. Written to the ACID block.
     pub save_data_owner_id_min: u64,
+    /// Highest save data owner ID the descriptor permits. Written to the ACID block.
     pub save_data_owner_id_max: u64,
 }
 
