@@ -17,7 +17,7 @@ layer and everything that touches a filesystem sit behind the `filesystem-suppor
 2. **Use Skills for operations** → Invoke skills (`/code-format`, `/code-check`, `/code-test`, `/code-rules-check`, `/docs-fmt-check`, `/code-review`) instead of running commands directly.
 3. **Skills wrap justfile tasks** → Skills provide the interface to `just` commands with proper guidance.
 4. **Follow the workflow** → Format → Check → Clippy → Test → Rules check.
-5. **Mind the feature axis** → A change outside `filesystem-support` must still compile without `std` (`just check-rs --no-default-features --target aarch64-unknown-none`).
+5. **Mind the feature axis** → A change outside `filesystem-support` must still compile without `std` (`just check --no-default-features --target aarch64-unknown-none`).
 6. **Fix ALL warnings** → Zero tolerance for clippy warnings.
 
 **Your first action**: Invoke `/code-rules` to load the rules before drafting a plan or writing any code. For commands, invoke the relevant Skill.
@@ -123,7 +123,7 @@ format has all three layers; see the table in `README.md`.
 
 `#![cfg_attr(not(feature = "filesystem-support"), no_std)]` in `src/lib.rs` is what makes the default build
 `no_std`. Code that is not behind a `filesystem-support` gate therefore may not reach for `std`, and the check
-that proves it is `just check-rs --no-default-features --target aarch64-unknown-none`. That target stands in
+that proves it is `just check --no-default-features --target aarch64-unknown-none`. That target stands in
 for the console's `aarch64-nintendo-switch-freestanding`, which is tier 3 and would need `-Z build-std` on
 nightly; both are 64-bit aarch64, so pointer width and alignment match what the console sees.
 

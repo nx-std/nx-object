@@ -5,42 +5,35 @@ default:
 
 ## Format
 
-alias fmt := fmt-rs
-alias fmt-check := fmt-rs-check
-
-# Format Rust code (cargo fmt --all)
+# Format the code (cargo fmt --all)
 [group: 'format']
-fmt-rs:
+fmt:
     cargo +nightly fmt --all
 
-# Check Rust code format (cargo fmt --check)
+# Check the code format (cargo fmt --check)
 [group: 'format']
-fmt-rs-check:
+fmt-check:
     cargo +nightly fmt --all -- --check
 
 
 ## Check
 
-alias check := check-rs
-
 # Neither recipe hardcodes --all-targets: the caller picks the configuration, and on
 # a bare-metal target the test and bench targets cannot build at all, because they
 # link the libtest harness and need a panic handler. The no_std build is
-# `just check-rs --no-default-features --target aarch64-unknown-none`.
+# `just check --no-default-features --target aarch64-unknown-none`.
 
-# Check Rust code (cargo check)
+# Compile check (cargo check)
 [group: 'check']
-check-rs *EXTRA_FLAGS:
+check *EXTRA_FLAGS:
     cargo check {{EXTRA_FLAGS}}
 
-# Lint Rust code (cargo clippy)
+# Lint (cargo clippy)
 [group: 'check']
 clippy *EXTRA_FLAGS:
     cargo clippy {{EXTRA_FLAGS}}
 
-alias check-deps := check-unused-deps
-
-# Check for unused Rust dependencies (cargo machete)
+# Check for unused dependencies (cargo machete)
 [group: 'check']
 check-unused-deps:
     cargo machete
@@ -69,11 +62,9 @@ test *EXTRA_FLAGS:
 
 ## Clean
 
-alias clean := cargo-clean
-
-# Clean cargo build artifacts (cargo clean)
+# Clean build artifacts (cargo clean)
 [group: 'clean']
-cargo-clean:
+clean:
     cargo clean
 
 

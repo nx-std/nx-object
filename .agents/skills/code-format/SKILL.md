@@ -1,7 +1,7 @@
 ---
 name: code-format
 description: Format Rust code in the nx-std/nx-object crate. Use immediately after editing .rs files, when user mentions formatting, code style, rustfmt, or before commits/PRs.
-allowed-tools: "Bash(just fmt:*), Bash(just fmt-rs:*), Bash(just fmt-check:*), Bash(just fmt-rs-check:*)"
+allowed-tools: "Bash(just fmt:*), Bash(just fmt-check:*)"
 ---
 
 # Code Formatting Skill
@@ -18,23 +18,23 @@ Code formatting operations for the `nx-std/nx-object` crate.
 
 This is a single small crate. Always format the whole crate — it is fast.
 
-| Scope    | Command          | Rationale                              |
-|----------|------------------|----------------------------------------|
-| Any edit | `just fmt-rs`    | Crate-wide nightly rustfmt; standard.  |
+| Scope    | Command    | Rationale                              |
+|----------|------------|----------------------------------------|
+| Any edit | `just fmt` | Crate-wide nightly rustfmt; standard.  |
 
 ## Available Commands
 
 ### Format Rust Code
 ```bash
-just fmt-rs
+just fmt
 ```
-Formats all Rust code using `cargo +nightly fmt --all`. Nightly is required because `rustfmt.toml` uses unstable features (`imports_granularity`, `group_imports`). **Alias:** `just fmt`.
+Formats all Rust code using `cargo +nightly fmt --all`. Nightly is required because `rustfmt.toml` uses unstable features (`imports_granularity`, `group_imports`).
 
 ### Check Rust Formatting
 ```bash
-just fmt-rs-check
+just fmt-check
 ```
-Checks formatting without making changes (`cargo +nightly fmt --all -- --check`). **Alias:** `just fmt-check`.
+Checks formatting without making changes (`cargo +nightly fmt --all -- --check`).
 
 ## Important Guidelines
 
@@ -45,19 +45,19 @@ Format when you finish a coherent chunk of work and before running checks or com
 ### Example Workflow
 
 1. Edit `src/...`.
-2. Run `just fmt-rs`.
+2. Run `just fmt`.
 3. Run `/code-check`.
 
 ## Common Mistakes to Avoid
 
 ### Anti-patterns
-- **Never run `cargo fmt` or `rustfmt` directly** — use `just fmt-rs` (selects nightly + project config).
+- **Never run `cargo fmt` or `rustfmt` directly** — use `just fmt` (selects nightly + project config).
 - **Never skip formatting before checks/commit** — even minor edits.
-- **Never commit unformatted code** — verify with `just fmt-rs-check`.
+- **Never commit unformatted code** — verify with `just fmt-check`.
 
 ### Best Practices
 - Format before running checks/tests or before committing.
-- Run `just fmt-rs-check` to verify formatting before commits.
+- Run `just fmt-check` to verify formatting before commits.
 
 ## Formatting Configuration
 
@@ -66,8 +66,8 @@ Nightly rustfmt (pinned via `rust-toolchain.toml`), config in `rustfmt.toml` wit
 ## Pre-approved Commands
 
 These commands can run without user permission:
-- `just fmt-rs` (alias `just fmt`) — safe formatting operation.
-- `just fmt-rs-check` (alias `just fmt-check`) — safe, read-only format check.
+- `just fmt` — safe formatting operation.
+- `just fmt-check` — safe, read-only format check.
 
 ## Next Steps
 
