@@ -28,7 +28,7 @@ pub const NO_ENTRY: u32 = 0xFFFF_FFFF;
 /// probe, and the metadata tables hold the entries themselves; a lookup reads the hash table to
 /// find a candidate entry, then walks the chain in the metadata table.
 ///
-/// See <https://switchbrew.org/wiki/RomFS#Header>.
+/// See <https://www.3dbrew.org/wiki/RomFS#Level_3_Header_Format>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct RomFsHeader {
@@ -57,7 +57,7 @@ pub struct RomFsHeader {
     pub file_data_offset: U64,
 }
 
-// Verify struct size - https://switchbrew.org/wiki/RomFS#Header
+// Verify struct size - https://www.3dbrew.org/wiki/RomFS#Level_3_Header_Format
 const_assert_eq!(size_of::<RomFsHeader>(), 0x50);
 const_assert_eq!(align_of::<RomFsHeader>(), 0x1);
 
@@ -70,7 +70,7 @@ const_assert_eq!(align_of::<RomFsHeader>(), 0x1);
 ///
 /// The `0x18` bytes asserted below are the fixed prefix only; the entry's name follows it inline.
 ///
-/// See <https://switchbrew.org/wiki/RomFS#Directory_Entry>.
+/// See <https://www.3dbrew.org/wiki/RomFS#Directory_Metadata_Structure>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct RomFsDirEntry {
@@ -89,7 +89,7 @@ pub struct RomFsDirEntry {
     // The UTF-8 name follows inline, padded to a 4-byte boundary.
 }
 
-// Verify struct size - https://switchbrew.org/wiki/RomFS#Directory_Entry
+// Verify struct size - https://www.3dbrew.org/wiki/RomFS#Directory_Metadata_Structure
 const_assert_eq!(size_of::<RomFsDirEntry>(), 0x18);
 const_assert_eq!(align_of::<RomFsDirEntry>(), 0x1);
 
@@ -101,7 +101,7 @@ const_assert_eq!(align_of::<RomFsDirEntry>(), 0x1);
 ///
 /// The `0x20` bytes asserted below are the fixed prefix only; the entry's name follows it inline.
 ///
-/// See <https://switchbrew.org/wiki/RomFS#File_Entry>.
+/// See <https://www.3dbrew.org/wiki/RomFS#File_Metadata_Structure>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct RomFsFileEntry {
@@ -120,7 +120,7 @@ pub struct RomFsFileEntry {
     // The UTF-8 name follows inline, padded to a 4-byte boundary.
 }
 
-// Verify struct size - https://switchbrew.org/wiki/RomFS#File_Entry
+// Verify struct size - https://www.3dbrew.org/wiki/RomFS#File_Metadata_Structure
 const_assert_eq!(size_of::<RomFsFileEntry>(), 0x20);
 const_assert_eq!(align_of::<RomFsFileEntry>(), 0x1);
 

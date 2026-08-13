@@ -2,19 +2,24 @@
 
 Zero-copy parsing and generation of Nintendo Switch file formats.
 
-The crate is `no_std` by default and opts into `std` through the `filesystem-support` feature, so the
-same format definitions serve both host-side tooling and code running on the console.
+Turns a byte buffer into a validated view of an NRO, NSO, NACP, NPDM, or RomFS image, and builds each
+of those formats back out of its parts. Nothing is copied to read an image and nothing is written to
+disk to produce one, so the same definitions serve a host-side packer and code running on the console.
 
 ## Layers
 
 The crate is organized in three layers, each usable on its own:
 
 - **`raw`** -- `#[repr(C)]` binary structure definitions backed by [`zerocopy`]. Direct field access,
-  no parsing overhead, always available.
-- **`read`** -- Parsing wrappers over the raw structures. Validate magic numbers and sizes, and report
-  a typed error per format. Always available.
-- **`write`** -- Builders that assemble a format and return the finished image as a byte buffer, so the
-  caller chooses where the artifact lands. Requires `filesystem-support`.
+  no parsing overhead, no allocator.
+- **`read`** -- Parsing wrappers over the raw structures. Validate magic numbers and sizes once, then
+  hand out parts without further checks, and report a typed error per format. No allocator.
+- **`write`** -- Builders that assemble a format and return the finished image as a byte buffer, so
+  the caller chooses where the artifact lands. Needs a heap; the builders that walk a directory need
+  a filesystem too.
+
+A fourth module, `elf`, extracts the segments of a linked ELF binary and hands them to the NRO and
+NSO builders.
 
 ## Formats
 
@@ -29,15 +34,12 @@ The crate is organized in three layers, each usable on its own:
 | PFS0   | Partition filesystem archive                   |   ✓   |        |    ✓    |
 | MOD0   | Module header embedded in executables          |   ✓   |   ✓    |         |
 
-## Features
+## What this crate does not do
 
-| Feature              | Description                                                                |
-|----------------------|----------------------------------------------------------------------------|
-| `filesystem-support` | Enables the `write` layer and `std`. Required by the other features.        |
-| `elf-parsing`        | Derives NRO and NSO segments from a linked ELF binary (`elf` module).       |
-| `lz4-compression`    | LZ4 compression and decompression of NSO segments.                          |
-
-No features are enabled by default; that configuration is `no_std`.
+It does not sign, encrypt, or verify anything: an NPDM's ACID signature is stored and reproduced but
+never checked, and an NSO's segment hashes are computed on write yet left to the caller on read. It
+also does not decompress, because a reader that borrows its buffer has nowhere to put the expanded
+bytes.
 
 ## Usage
 
@@ -46,30 +48,41 @@ No features are enabled by default; that configuration is `no_std`.
 nx-object = { git = "https://github.com/nx-std/nx-object" }
 ```
 
+The default build carries every format and the standard library. A consumer that wants less -- one
+format, or a build with no allocator and no OS -- selects it through the crate's Cargo features,
+which are documented on each entry in [`Cargo.toml`](Cargo.toml).
+
 ## Development
 
 ```bash
 just check --all-targets --all-features   # compile check
 just clippy --all-targets --all-features  # lint
 just test --all-features                  # cargo nextest run (falls back to cargo test)
+just check-unused-deps                    # cargo machete
 just fmt                                  # cargo +nightly fmt --all
 
-# The no_std half, the way CI builds it
-just check --no-default-features --target aarch64-unknown-none
-just clippy --no-default-features --target aarch64-unknown-none
+# The bare-metal half, the way CI builds it
+just check --no-default-features --features all-formats,alloc --target aarch64-unknown-none
+just clippy --no-default-features --features all-formats,alloc --target aarch64-unknown-none
 ```
 
 ## References
 
-- [switchbrew NRO](https://switchbrew.org/wiki/NRO)
-- [switchbrew NSO](https://switchbrew.org/wiki/NSO)
-- [switchbrew KIP](https://switchbrew.org/wiki/KIP)
-- [switchbrew NACP](https://switchbrew.org/wiki/NACP)
-- [switchbrew NPDM](https://switchbrew.org/wiki/NPDM)
-- [switchbrew RomFS](https://switchbrew.org/wiki/RomFS)
+Every format the crate covers is documented on the [switchbrew] wiki, except RomFS, whose layout the
+console inherits unchanged from the 3DS.
+
+- [NRO](https://switchbrew.org/wiki/NRO)
+- [NSO](https://switchbrew.org/wiki/NSO)
+- [KIP1](https://switchbrew.org/wiki/KIP1)
+- [NACP](https://switchbrew.org/wiki/NACP)
+- [NPDM](https://switchbrew.org/wiki/NPDM)
+- [PFS0](https://switchbrew.org/wiki/NCA#PFS0)
+- [MOD](https://switchbrew.org/wiki/MOD)
+- [RomFS](https://www.3dbrew.org/wiki/RomFS)
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
 
 [`zerocopy`]: https://docs.rs/zerocopy
+[switchbrew]: https://switchbrew.org/wiki/Main_Page

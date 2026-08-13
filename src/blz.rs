@@ -78,7 +78,7 @@
 //!
 //! # References
 //!
-//! - <https://switchbrew.org/wiki/KIP>
+//! - <https://switchbrew.org/wiki/KIP1>
 
 use alloc::{vec, vec::Vec};
 

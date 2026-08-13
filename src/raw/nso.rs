@@ -42,7 +42,7 @@ bitflags! {
 
 /// Where one segment sits in the file, where it lands in memory, and how large it is once expanded.
 ///
-/// See <https://switchbrew.org/wiki/NSO#Segment_Header>.
+/// See <https://switchbrew.org/wiki/NSO#NsoHeader>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NsoSegmentHeader {
@@ -58,7 +58,7 @@ pub struct NsoSegmentHeader {
     pub size: U32,
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NSO#Segment_Header
+// Verify struct size - https://switchbrew.org/wiki/NSO#NsoHeader
 const_assert_eq!(size_of::<NsoSegmentHeader>(), 0xC);
 const_assert_eq!(align_of::<NsoSegmentHeader>(), 0x1);
 
@@ -67,7 +67,7 @@ const_assert_eq!(align_of::<NsoSegmentHeader>(), 0x1);
 /// Occupies the first `0x100` bytes of the file. Unlike an NRO, an NSO opens with its magic rather
 /// than with code, and its segments may be compressed and verified individually.
 ///
-/// See <https://switchbrew.org/wiki/NSO#Header>.
+/// See <https://switchbrew.org/wiki/NSO#NsoHeader>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NsoHeader {
@@ -119,6 +119,6 @@ pub struct NsoHeader {
     pub data_hash: [u8; 0x20],
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NSO#Header
+// Verify struct size - https://switchbrew.org/wiki/NSO#NsoHeader
 const_assert_eq!(size_of::<NsoHeader>(), 0x100);
 const_assert_eq!(align_of::<NsoHeader>(), 0x1);

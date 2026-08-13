@@ -19,7 +19,7 @@ pub const KIP1_MAGIC: u32 = 0x3150494b;
 /// stored length to find the compressed bytes and the final length to know how much room to leave.
 /// When the segment's compression bit in [`Kip1Header::flags`] is clear, the two are equal.
 ///
-/// See <https://switchbrew.org/wiki/KIP#Segment_Header>.
+/// See <https://switchbrew.org/wiki/KIP1#Segment_Header>.
 #[derive(Debug, Clone, Copy, zerocopy::FromZeros, zerocopy::IntoBytes, zerocopy::Immutable)]
 #[repr(C)]
 pub struct Kip1Segment {
@@ -36,7 +36,7 @@ pub struct Kip1Segment {
     pub attributes: U32,
 }
 
-// Verify struct size - https://switchbrew.org/wiki/KIP#Segment_Header
+// Verify struct size - https://switchbrew.org/wiki/KIP1#Segment_Header
 const_assert_eq!(size_of::<Kip1Segment>(), 0x10);
 const_assert_eq!(align_of::<Kip1Segment>(), 0x1);
 
@@ -46,7 +46,7 @@ const_assert_eq!(align_of::<Kip1Segment>(), 0x1);
 /// Occupies the first `0x100` bytes of the file. A KIP is launched by the kernel before any
 /// filesystem exists, so the header carries what a loader would otherwise read from an NPDM.
 ///
-/// See <https://switchbrew.org/wiki/KIP#KIP_Header>.
+/// See <https://switchbrew.org/wiki/KIP1#KIP1>.
 #[derive(Debug, Clone, Copy, zerocopy::FromZeros, zerocopy::IntoBytes, zerocopy::Immutable)]
 #[repr(C)]
 pub struct Kip1Header {
@@ -79,6 +79,6 @@ pub struct Kip1Header {
     pub capabilities: [u8; 0x80],
 }
 
-// Verify struct size - https://switchbrew.org/wiki/KIP#KIP_Header
+// Verify struct size - https://switchbrew.org/wiki/KIP1#KIP1
 const_assert_eq!(size_of::<Kip1Header>(), 0x100);
 const_assert_eq!(align_of::<Kip1Header>(), 0x1);

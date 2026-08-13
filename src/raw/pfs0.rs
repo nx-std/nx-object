@@ -26,7 +26,7 @@ pub const PFS0_MAGIC: u32 = 0x30534650;
 /// and `string_table_size`. Both fields are therefore load-bearing, and a wrong one shifts every
 /// file in the archive.
 ///
-/// See <https://switchbrew.org/wiki/PFS0#Header>.
+/// See <https://switchbrew.org/wiki/NCA#PFS0>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct Pfs0Header {
@@ -40,7 +40,7 @@ pub struct Pfs0Header {
     pub _reserved: U32,
 }
 
-// Verify struct size - https://switchbrew.org/wiki/PFS0#Header
+// Verify struct size - https://switchbrew.org/wiki/NCA#PFS0
 const_assert_eq!(size_of::<Pfs0Header>(), 0x10);
 const_assert_eq!(align_of::<Pfs0Header>(), 0x1);
 
@@ -49,7 +49,7 @@ const_assert_eq!(align_of::<Pfs0Header>(), 0x1);
 /// Entries sit in a table immediately after [`Pfs0Header`], in the same order as the files in the
 /// data region. Neither offset is absolute, and the two are measured from different origins.
 ///
-/// See <https://switchbrew.org/wiki/PFS0#File_Entry>.
+/// See <https://switchbrew.org/wiki/NCA#PartitionEntry>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct Pfs0FileEntry {
@@ -66,6 +66,6 @@ pub struct Pfs0FileEntry {
     pub _reserved: U32,
 }
 
-// Verify struct size - https://switchbrew.org/wiki/PFS0#File_Entry
+// Verify struct size - https://switchbrew.org/wiki/NCA#PartitionEntry
 const_assert_eq!(size_of::<Pfs0FileEntry>(), 0x18);
 const_assert_eq!(align_of::<Pfs0FileEntry>(), 0x1);

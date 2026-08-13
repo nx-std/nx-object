@@ -19,7 +19,7 @@ use zerocopy::{
 /// indexing rather than by searching. An entry left zeroed means the title offers no name in that
 /// language and the console falls back to another.
 ///
-/// See <https://switchbrew.org/wiki/NACP#Title>.
+/// See <https://switchbrew.org/wiki/NACP#ApplicationTitle>.
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
 pub struct NacpLanguageEntry {
@@ -29,7 +29,7 @@ pub struct NacpLanguageEntry {
     pub author: [u8; 0x100],
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NACP#Title
+// Verify struct size - https://switchbrew.org/wiki/NACP#ApplicationTitle
 const_assert_eq!(size_of::<NacpLanguageEntry>(), 0x300);
 const_assert_eq!(align_of::<NacpLanguageEntry>(), 0x1);
 
