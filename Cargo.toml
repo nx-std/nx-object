@@ -18,9 +18,11 @@ bench = false
 ## Every format and the standard library, so a consumer who names none gets the whole crate
 default = ["all-formats", "std"]
 ## Every format at once, for a consumer that would rather not list them
-all-formats = ["kip", "mod0", "nacp", "npdm", "nro", "nso", "pfs0", "romfs"]
+all-formats = ["cnmt", "kip", "mod0", "nacp", "nca", "npdm", "nro", "nso", "pfs0", "romfs"]
 ## The heap the builders assemble an image on, which is all they need beyond `no_std`
 alloc = ["serde?/alloc", "zerocopy/alloc"]
+## CNMT, the content meta naming every NCA of a title
+cnmt = []
 ## ELF parsing, for deriving NRO and NSO segments from a linked binary.
 ## Pulls `nro` and `nso`: it derives the segments by driving those two builders.
 elf-parsing = ["std", "nro", "nso", "dep:object"]
@@ -33,6 +35,9 @@ lz4-compression = ["alloc", "nso", "dep:lz4_flex"]
 mod0 = []
 ## NACP, the control property naming a title
 nacp = []
+## NCA, the container a title's contents are distributed in.
+## Pulls `sha2`: every section of an NCA is covered by a hash tree or table built here.
+nca = ["alloc", "dep:sha2"]
 ## NPDM, the metadata describing a program's permissions
 npdm = []
 ## NRO, the relocatable object homebrew ships as

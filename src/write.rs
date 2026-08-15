@@ -14,10 +14,14 @@
 //! them on build, so the same inputs always produce the same bytes and an artifact can be compared
 //! against a rebuild.
 
+#[cfg(feature = "cnmt")]
+pub mod cnmt;
 #[cfg(feature = "kip")]
 pub mod kip;
 #[cfg(feature = "nacp")]
 pub mod nacp;
+#[cfg(feature = "nca")]
+pub mod nca;
 #[cfg(feature = "npdm")]
 pub mod npdm;
 #[cfg(feature = "nro")]
@@ -29,10 +33,14 @@ pub mod pfs0;
 #[cfg(feature = "romfs")]
 pub mod romfs;
 
+#[cfg(feature = "cnmt")]
+pub use cnmt::CnmtBuilder;
 #[cfg(feature = "kip")]
 pub use kip::Kip1Builder;
 #[cfg(feature = "nacp")]
 pub use nacp::NacpBuilder;
+#[cfg(feature = "nca")]
+pub use nca::NcaBuilder;
 #[cfg(feature = "npdm")]
 pub use npdm::NpdmBuilder;
 #[cfg(feature = "nro")]

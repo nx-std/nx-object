@@ -15,12 +15,16 @@
 //! native integers, because the format is little-endian regardless of the host this crate runs on.
 
 pub mod build_id;
+#[cfg(feature = "cnmt")]
+pub mod cnmt;
 #[cfg(feature = "kip")]
 pub mod kip;
 #[cfg(feature = "mod0")]
 pub mod mod0;
 #[cfg(feature = "nacp")]
 pub mod nacp;
+#[cfg(feature = "nca")]
+pub mod nca;
 #[cfg(feature = "npdm")]
 pub mod npdm;
 #[cfg(feature = "nro")]

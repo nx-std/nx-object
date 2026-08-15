@@ -109,8 +109,12 @@ and `raw` depends on nothing above it.
 | `write` | Builders that assemble a format and return the finished image as a byte buffer    | `alloc`               |
 | `elf`   | Derives NRO and NSO segments from a linked ELF binary                             | `elf-parsing`         |
 
-Formats covered: NRO, NSO, KIP, NACP, NPDM, RomFS, PFS0, and the MOD0 header embedded in executables. Not every
-format has all three layers; see the table in `README.md`.
+Formats covered: NRO, NSO, KIP, NACP, NPDM, RomFS, PFS0, the MOD0 header embedded in executables, and the NCA
+and CNMT a title is distributed as. Not every format has all three layers; see the table in `README.md`.
+
+The crate hashes but never encrypts or signs. `write::nca` therefore stops at the plaintext container and
+reports what a caller still owes it, which is why anything touching a keyset or a cipher belongs in the
+consumer rather than here.
 
 ### Features
 
@@ -120,8 +124,8 @@ comment in `Cargo.toml`, which is the authoritative description; what follows is
 | Feature                                            | Pulls in                     | Effect                                             |
 |----------------------------------------------------|------------------------------|----------------------------------------------------|
 | `default`                                          | `all-formats`, `std`         | The whole crate, for a consumer that names nothing  |
-| `all-formats`                                      | every format feature         | All eight formats at once                          |
-| `kip`, `mod0`, `nacp`, `npdm`, `nro`, `nso`, `pfs0`, `romfs` | — (`nso` adds `bitflags`, `sha2`) | One format's `raw`, `read` and `write` modules |
+| `all-formats`                                      | every format feature         | All ten formats at once                            |
+| `cnmt`, `kip`, `mod0`, `nacp`, `nca`, `npdm`, `nro`, `nso`, `pfs0`, `romfs` | — (`nso` and `nca` add `sha2`; `nso` adds `bitflags`; `nca` adds `alloc`) | One format's `raw`, `read` and `write` modules |
 | `alloc`                                            | —                            | The `write` layer, which needs a heap and no more   |
 | `std`                                              | `alloc`, `fs-err`            | The `from_directory` builders and path-carrying errors |
 | `serde`                                            | `alloc`, `serde`             | Derives on the NPDM builder's inputs               |

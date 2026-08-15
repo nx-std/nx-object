@@ -51,6 +51,8 @@
 //! | RomFS  | The read-only filesystem a title ships        |   ✓   |   ✓    |    ✓    |
 //! | PFS0   | The flat archive an NSP is built from         |   ✓   |        |    ✓    |
 //! | MOD0   | The runtime header embedded in an executable  |   ✓   |   ✓    |         |
+//! | NCA    | The container a title's contents ship in      |   ✓   |        |    ✓    |
+//! | CNMT   | The content meta naming every NCA of a title  |   ✓   |        |    ✓    |
 //!
 //! # What this crate does not do
 //!
@@ -58,6 +60,14 @@
 //! but never checked, and an NSO's segment hashes are computed on write yet left to the caller on
 //! read. It also does not decompress: an NSO segment comes back as stored, because a reader that
 //! borrows its buffer has nowhere to put the expanded bytes.
+//!
+//! NCA is where that line is most visible, because an NCA on disk is encrypted throughout.
+//! [`write::NcaBuilder`] produces the plaintext container and every hash covering it, then names
+//! what is still owed; the caller supplies the keyset and the ciphers. The split is deliberate: a
+//! keyset is secret material with its own provenance and handling rules, and a crate whose contract
+//! is bytes in, bytes out, no I/O is the wrong place to acquire one. Hashing stays here because a
+//! hash is part of the layout — it is what makes the recorded offsets checkable — while encryption
+//! is a transformation applied to a layout that is already correct.
 //!
 //! # References
 //!
@@ -73,6 +83,8 @@
 //! - [MOD](https://switchbrew.org/wiki/MOD)
 //! - [PFS0](https://switchbrew.org/wiki/NCA#PFS0)
 //! - [RomFS](https://www.3dbrew.org/wiki/RomFS)
+//! - [NCA](https://switchbrew.org/wiki/NCA)
+//! - [CNMT](https://switchbrew.org/wiki/CNMT)
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs)]

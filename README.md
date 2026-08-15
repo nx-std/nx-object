@@ -2,9 +2,10 @@
 
 Zero-copy parsing and generation of Nintendo Switch file formats.
 
-Turns a byte buffer into a validated view of an NRO, NSO, NACP, NPDM, or RomFS image, and builds each
-of those formats back out of its parts. Nothing is copied to read an image and nothing is written to
-disk to produce one, so the same definitions serve a host-side packer and code running on the console.
+Turns a byte buffer into a validated view of an NRO, NSO, NACP, NPDM, or RomFS image, and builds
+those formats -- and the NCA and CNMT a title is distributed as -- back out of their parts. Nothing
+is copied to read an image and nothing is written to disk to produce one, so the same definitions
+serve a host-side packer and code running on the console.
 
 ## Layers
 
@@ -33,6 +34,8 @@ NSO builders.
 | RomFS  | Read-only filesystem image                     |   ✓   |   ✓    |    ✓    |
 | PFS0   | Partition filesystem archive                   |   ✓   |        |    ✓    |
 | MOD0   | Module header embedded in executables          |   ✓   |   ✓    |         |
+| NCA    | Nintendo Content Archive                       |   ✓   |        |    ✓    |
+| CNMT   | Content meta naming every NCA of a title       |   ✓   |        |    ✓    |
 
 ## What this crate does not do
 
@@ -40,6 +43,12 @@ It does not sign, encrypt, or verify anything: an NPDM's ACID signature is store
 never checked, and an NSO's segment hashes are computed on write yet left to the caller on read. It
 also does not decompress, because a reader that borrows its buffer has nowhere to put the expanded
 bytes.
+
+NCA is where that line is most visible, because an NCA on disk is encrypted throughout. `NcaBuilder`
+produces the plaintext container and every hash covering it, then names what is still owed; the
+caller supplies the keyset and the ciphers. Hashing stays here because a hash is part of the layout
+-- it is what makes the recorded offsets checkable -- while encryption is a transformation applied to
+a layout that is already correct.
 
 ## Usage
 
@@ -78,6 +87,8 @@ console inherits unchanged from the 3DS.
 - [NPDM](https://switchbrew.org/wiki/NPDM)
 - [PFS0](https://switchbrew.org/wiki/NCA#PFS0)
 - [MOD](https://switchbrew.org/wiki/MOD)
+- [NCA](https://switchbrew.org/wiki/NCA)
+- [CNMT](https://switchbrew.org/wiki/CNMT)
 - [RomFS](https://www.3dbrew.org/wiki/RomFS)
 
 ## License
