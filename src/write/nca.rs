@@ -266,7 +266,7 @@ impl NcaBuilder {
             header.section_entries[index] = NcaSectionEntry {
                 media_start_offset: media_start.into(),
                 media_end_offset: media_end.into(),
-                _unknown: [1, 0, 0, 0, 0, 0, 0, 0],
+                _reserved: [1, 0, 0, 0, 0, 0, 0, 0],
             };
             header.section_hashes[index] = Sha256::digest(fs_header.as_bytes()).into();
             header.fs_headers[index] = fs_header;
@@ -347,7 +347,7 @@ pub struct CtrSection {
 const EMPTY_SECTION_ENTRY: NcaSectionEntry = NcaSectionEntry {
     media_start_offset: zerocopy::little_endian::U32::ZERO,
     media_end_offset: zerocopy::little_endian::U32::ZERO,
-    _unknown: [0; 0x8],
+    _reserved: [0; 0x8],
 };
 
 /// An empty FS header, which is what an unused slot holds.
@@ -378,12 +378,12 @@ fn lay_out_section(section: Section) -> (Vec<u8>, NcaFsHeader) {
             let mut superblock = crate::raw::nca::RomFsSuperblock {
                 ivfc_header: crate::raw::nca::IvfcHeader {
                     magic: IVFC_MAGIC.into(),
-                    id: 0x20000.into(),
+                    version: 0x20000.into(),
                     master_hash_size: 0x20.into(),
                     // Counts the master hash as well as the stored levels.
                     level_count: (tree.level_headers.len() as u32 + 1).into(),
                     level_headers: tree.level_headers,
-                    _reserved: [0; 0x20],
+                    signature_salt: [0; 0x20],
                     master_hash: tree.master_hash,
                 },
                 _reserved: [0; 0x58],

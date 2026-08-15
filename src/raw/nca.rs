@@ -48,7 +48,7 @@ pub const NCA_SECTION_COUNT: usize = 4;
 /// A section that is not present leaves its entry zeroed, which is why an all-zero entry means "no
 /// section here" rather than "a section of length zero at the start of the file".
 ///
-/// See <https://switchbrew.org/wiki/NCA#SectionTableEntry>.
+/// See <https://switchbrew.org/wiki/NCA#FsEntry>.
 #[derive(
     Debug,
     Clone,
@@ -64,11 +64,11 @@ pub struct NcaSectionEntry {
     pub media_start_offset: U32,
     /// One past the last media unit of the section.
     pub media_end_offset: U32,
-    /// Unknown to the format's documentation; `1` in the first byte for every populated entry.
-    pub _unknown: [u8; 0x8],
+    /// Reserved by the format; the first byte is written as `1` for every populated entry.
+    pub _reserved: [u8; 0x8],
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NCA#SectionTableEntry
+// Verify struct size - https://switchbrew.org/wiki/NCA#FsEntry
 const_assert_eq!(size_of::<NcaSectionEntry>(), 0x10);
 const_assert_eq!(align_of::<NcaSectionEntry>(), 0x1);
 
@@ -76,6 +76,8 @@ const_assert_eq!(align_of::<NcaSectionEntry>(), 0x1);
 ///
 /// `logical_offset` is measured within the concatenated levels, not within the file, so level 0
 /// starts at zero and each later level starts where the previous one ended.
+///
+/// See <https://switchbrew.org/wiki/NCA#HierarchicalIntegrityVerificationLevelInformation>.
 #[derive(
     Debug,
     Clone,
@@ -98,6 +100,7 @@ pub struct IvfcLevelHeader {
     pub _reserved: U32,
 }
 
+// Verify struct size - https://switchbrew.org/wiki/NCA#HierarchicalIntegrityVerificationLevelInformation
 const_assert_eq!(size_of::<IvfcLevelHeader>(), 0x18);
 const_assert_eq!(align_of::<IvfcLevelHeader>(), 0x1);
 
@@ -112,6 +115,8 @@ pub const IVFC_MAX_LEVELS: usize = 6;
 /// is in turn covered by the FS header's hash in [`NcaHeader::section_hashes`].
 ///
 /// `level_count` counts the levels *including* the master hash, so a six-level tree records seven.
+///
+/// See <https://switchbrew.org/wiki/NCA#IntegrityMetaInfo>.
 #[derive(
     Debug,
     Clone,
@@ -126,19 +131,24 @@ pub struct IvfcHeader {
     /// Always [`IVFC_MAGIC`].
     pub magic: U32,
     /// Format revision; `0x20000` in every image this crate writes.
-    pub id: U32,
+    pub version: U32,
     /// Length of `master_hash` in bytes, which is `0x20` for the SHA-256 the format uses.
     pub master_hash_size: U32,
     /// Number of levels counting the master hash, so one more than the levels actually stored.
+    ///
+    /// The format calls this `MaxLayers`, and counts it as the first field of the `InfoLevelHash`
+    /// block that also holds the level headers and the salt below.
     pub level_count: U32,
     /// The stored levels, low to high; entries past the ones in use are zero.
     pub level_headers: [IvfcLevelHeader; IVFC_MAX_LEVELS],
-    /// Unused by the format; zero in every image this crate writes.
-    pub _reserved: [u8; 0x20],
+    /// Salt the format mixes into the tree's signature; zero in every image this crate writes,
+    /// which is what an unsigned homebrew title carries.
+    pub signature_salt: [u8; 0x20],
     /// SHA-256 of level 0 in full, padding included.
     pub master_hash: [u8; 0x20],
 }
 
+// Verify struct size - https://switchbrew.org/wiki/NCA#IntegrityMetaInfo
 const_assert_eq!(size_of::<IvfcHeader>(), 0xE0);
 const_assert_eq!(align_of::<IvfcHeader>(), 0x1);
 
@@ -159,10 +169,12 @@ const_assert_eq!(align_of::<IvfcHeader>(), 0x1);
 pub struct RomFsSuperblock {
     /// The hash tree covering the section.
     pub ivfc_header: IvfcHeader,
-    /// Padding to the size the FS header reserves for a superblock.
+    /// The rest of the span the FS header gives a superblock: the hash structure's own reserved
+    /// tail, then the `PatchInfo` an update NCA would use. Zero for a base title.
     pub _reserved: [u8; 0x58],
 }
 
+// Verify struct size - https://switchbrew.org/wiki/NCA#HashData
 const_assert_eq!(size_of::<RomFsSuperblock>(), 0x138);
 const_assert_eq!(align_of::<RomFsSuperblock>(), 0x1);
 
@@ -172,6 +184,8 @@ const_assert_eq!(align_of::<RomFsSuperblock>(), 0x1);
 /// per `block_size` bytes of archive, and `master_hash` covers the table. Both regions are located
 /// relative to the start of the section, so the offsets here are independent of where the section
 /// landed in the file.
+///
+/// See <https://switchbrew.org/wiki/NCA#HierarchicalSha256Data>.
 #[derive(
     Debug,
     Clone,
@@ -187,9 +201,12 @@ pub struct Pfs0Superblock {
     pub master_hash: [u8; 0x20],
     /// Bytes of archive each entry in the hash table covers.
     pub block_size: U32,
-    /// Layout revision; always `2`.
-    pub always_2: U32,
+    /// Number of layers the hash covers; always `2`, the table and the archive.
+    pub layer_count: U32,
     /// Offset of the hash table from the start of the section; zero, as the table leads.
+    ///
+    /// This and the three fields below are the format's first two `LayerRegions`, each an offset
+    /// and a size: one for the hash table, one for the archive.
     pub hash_table_offset: U64,
     /// Length of the hash table in bytes, excluding the padding that follows it.
     pub hash_table_size: U64,
@@ -197,10 +214,12 @@ pub struct Pfs0Superblock {
     pub pfs0_offset: U64,
     /// Length of the archive in bytes.
     pub pfs0_size: U64,
-    /// Unused by the format; zero in every image this crate writes.
+    /// The unused `LayerRegions` entries, the hash structure's reserved tail, and the `PatchInfo`
+    /// an update NCA would use. Zero for a base title.
     pub _reserved: [u8; 0xF0],
 }
 
+// Verify struct size - https://switchbrew.org/wiki/NCA#HashData
 const_assert_eq!(size_of::<Pfs0Superblock>(), 0x138);
 const_assert_eq!(align_of::<Pfs0Superblock>(), 0x1);
 
@@ -294,15 +313,20 @@ pub struct NcaFsHeader {
     pub crypt_type: u8,
     /// Padding to the superblock.
     pub _reserved_0x5: [u8; 0x3],
-    /// The verification structure, read according to `hash_type`.
+    /// The verification structure, read according to `hash_type`, followed by the `PatchInfo` an
+    /// update NCA would use. The format splits the span as `0xF8` of hash data and `0x40` of patch
+    /// info; this crate writes the first and leaves the second zero.
     pub superblock: [u8; 0x138],
     /// High half of the AES-CTR counter, big-endian, for a section encrypted with CTR.
+    ///
+    /// The format names the two halves `Generation` and `SecureValue`; together they are what the
+    /// counter for the section's first byte is built from.
     pub section_ctr: [u8; 0x8],
     /// Padding to `0x200`.
     pub _reserved_0x148: [u8; 0xB8],
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NCA#NcaFsHeader
+// Verify struct size - https://switchbrew.org/wiki/NCA#FsHeader
 const_assert_eq!(size_of::<NcaFsHeader>(), 0x200);
 const_assert_eq!(align_of::<NcaFsHeader>(), 0x1);
 
@@ -317,7 +341,7 @@ const_assert_eq!(align_of::<NcaFsHeader>(), 0x1);
 /// `crypto_type`, `crypto_type2` and `kaek_index` select between. This crate stores whatever bytes
 /// it is handed there and never wraps them.
 ///
-/// See <https://switchbrew.org/wiki/NCA#NcaHeader>.
+/// See <https://switchbrew.org/wiki/NCA#Header>.
 #[derive(
     Debug,
     Clone,
@@ -369,6 +393,6 @@ pub struct NcaHeader {
     pub fs_headers: [NcaFsHeader; NCA_SECTION_COUNT],
 }
 
-// Verify struct size - https://switchbrew.org/wiki/NCA#NcaHeader
+// Verify struct size - https://switchbrew.org/wiki/NCA#Header
 const_assert_eq!(size_of::<NcaHeader>(), 0xC00);
 const_assert_eq!(align_of::<NcaHeader>(), 0x1);

@@ -119,7 +119,7 @@ impl CnmtBuilder {
         let extended_header = CnmtApplicationExtendedHeader {
             patch_title_id: self.title_id.wrapping_add(PATCH_TITLE_ID_OFFSET).into(),
             required_system_version: 0.into(),
-            _reserved: 0.into(),
+            required_application_version: 0.into(),
         };
 
         let mut buf = Vec::new();

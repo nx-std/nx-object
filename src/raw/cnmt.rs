@@ -23,7 +23,7 @@ use zerocopy::little_endian::{U16, U32, U64};
 /// `extended_header_size` is what locates the records: they begin that many bytes after this header,
 /// so a size that does not match the extended header actually written shifts every record.
 ///
-/// See <https://switchbrew.org/wiki/CNMT#PackagedContentMeta>.
+/// See <https://switchbrew.org/wiki/CNMT#PackagedContentMetaHeader>.
 #[derive(
     Debug,
     Clone,
@@ -42,7 +42,8 @@ pub struct CnmtHeader {
     pub title_version: U32,
     /// One of [`CnmtContentMetaType`].
     pub meta_type: u8,
-    /// Unused by the format; zero in every file this crate writes.
+    /// The platform the title targets on `[17.0.0+]`, and reserved before it; zero either way for a
+    /// title built here.
     pub _reserved_0xd: u8,
     /// Length of the extended header that follows, in bytes.
     pub extended_header_size: U16,
@@ -50,11 +51,13 @@ pub struct CnmtHeader {
     pub content_entry_count: U16,
     /// Number of meta records after the content records; zero for an application.
     pub meta_entry_count: U16,
-    /// Unused by the format; zero in every file this crate writes.
+    /// The meta's attributes and the system version a download requires, with the format's padding
+    /// around them. Zero in every file this crate writes: a homebrew title sets no attribute and
+    /// imposes no floor.
     pub _reserved_0x14: [u8; 0xC],
 }
 
-// Verify struct size - https://switchbrew.org/wiki/CNMT#PackagedContentMeta
+// Verify struct size - https://switchbrew.org/wiki/CNMT#PackagedContentMetaHeader
 const_assert_eq!(size_of::<CnmtHeader>(), 0x20);
 const_assert_eq!(align_of::<CnmtHeader>(), 0x1);
 
@@ -80,8 +83,8 @@ pub struct CnmtApplicationExtendedHeader {
     pub patch_title_id: U64,
     /// Lowest system version that may launch the title; zero imposes no floor.
     pub required_system_version: U32,
-    /// Unused by the format; zero in every file this crate writes.
-    pub _reserved: U32,
+    /// Lowest version of the application an update may apply to; zero imposes no floor.
+    pub required_application_version: U32,
 }
 
 // Verify struct size - https://switchbrew.org/wiki/CNMT#ApplicationMetaExtendedHeader
@@ -112,6 +115,10 @@ pub struct CnmtContentRecord {
     /// The NCA's name on disk, which is the first sixteen bytes of `hash`.
     pub nca_id: [u8; 0x10],
     /// Length of the NCA in bytes, little-endian across six bytes.
+    ///
+    /// `[15.0.0+]` narrowed this to five and took the sixth for a content attribute. Writing the
+    /// size across all six stays compatible while an NCA is under 2^40 bytes, which leaves that byte
+    /// zero — the value the attribute reads as absent.
     pub size: [u8; 0x6],
     /// One of [`CnmtContentType`].
     pub content_type: u8,

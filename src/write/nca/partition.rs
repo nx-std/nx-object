@@ -49,7 +49,7 @@ pub fn build(archive: Vec<u8>, block_size: u32) -> PartitionSection {
     let superblock = Pfs0Superblock {
         master_hash,
         block_size: block_size.into(),
-        always_2: 2.into(),
+        layer_count: 2.into(),
         hash_table_offset: 0.into(),
         hash_table_size: hash_table_size.into(),
         pfs0_offset: archive_offset.into(),
