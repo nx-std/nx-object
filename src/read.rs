@@ -11,19 +11,25 @@
 //! at all: those readers check lengths and layout, so success means the buffer is shaped like the
 //! format, never that it is one.
 //!
-//! Nothing here decompresses or verifies a hash. An NSO segment comes back as stored, and checking
-//! it against the header's digest is the caller's, because a borrowing reader has nowhere to put
-//! the expanded bytes.
+//! Nothing here decompresses, decrypts, or verifies a hash. An NSO segment comes back as stored,
+//! and checking it against the header's digest is the caller's, because a borrowing reader has
+//! nowhere to put the expanded bytes. The same line puts NCA decryption outside: [`nca::Nca`] takes
+//! a buffer the caller has already decrypted, and an image still in ciphertext fails its magic
+//! check rather than parsing into nonsense.
 
 #[cfg(feature = "mod0")]
 pub mod mod0;
 #[cfg(feature = "nacp")]
 pub mod nacp;
+#[cfg(feature = "nca")]
+pub mod nca;
 #[cfg(feature = "npdm")]
 pub mod npdm;
 #[cfg(feature = "nro")]
 pub mod nro;
 #[cfg(feature = "nso")]
 pub mod nso;
+#[cfg(feature = "pfs0")]
+pub mod pfs0;
 #[cfg(feature = "romfs")]
 pub mod romfs;
