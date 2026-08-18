@@ -20,7 +20,15 @@ pub const KIP1_MAGIC: u32 = 0x3150494b;
 /// When the segment's compression bit in [`Kip1Header::flags`] is clear, the two are equal.
 ///
 /// See <https://switchbrew.org/wiki/KIP1#Segment_Header>.
-#[derive(Debug, Clone, Copy, zerocopy::FromZeros, zerocopy::IntoBytes, zerocopy::Immutable)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    zerocopy::FromBytes,
+    zerocopy::IntoBytes,
+    zerocopy::KnownLayout,
+    zerocopy::Immutable,
+)]
 #[repr(C)]
 pub struct Kip1Segment {
     /// Address the segment is loaded at, relative to the process image base.
@@ -47,7 +55,15 @@ const_assert_eq!(align_of::<Kip1Segment>(), 0x1);
 /// filesystem exists, so the header carries what a loader would otherwise read from an NPDM.
 ///
 /// See <https://switchbrew.org/wiki/KIP1#KIP1>.
-#[derive(Debug, Clone, Copy, zerocopy::FromZeros, zerocopy::IntoBytes, zerocopy::Immutable)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    zerocopy::FromBytes,
+    zerocopy::IntoBytes,
+    zerocopy::KnownLayout,
+    zerocopy::Immutable,
+)]
 #[repr(C)]
 pub struct Kip1Header {
     /// Always [`KIP1_MAGIC`]; anything else means this is not a KIP1.

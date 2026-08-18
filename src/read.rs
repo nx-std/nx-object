@@ -11,12 +11,20 @@
 //! at all: those readers check lengths and layout, so success means the buffer is shaped like the
 //! format, never that it is one.
 //!
-//! Nothing here decompresses, decrypts, or verifies a hash. An NSO segment comes back as stored,
-//! and checking it against the header's digest is the caller's, because a borrowing reader has
-//! nowhere to put the expanded bytes. The same line puts NCA decryption outside: [`nca::Nca`] takes
-//! a buffer the caller has already decrypted, and an image still in ciphertext fails its magic
-//! check rather than parsing into nonsense.
+//! No accessor here decrypts or verifies a hash. An NSO segment comes back as stored and checking
+//! it against the header's digest is the caller's, because a borrowing reader has nowhere to put
+//! the expanded bytes. The same line puts NCA decryption outside: [`nca::Nca`] takes a buffer the
+//! caller has already decrypted, and an image still in ciphertext fails its magic check rather than
+//! parsing into nonsense.
+//!
+//! Decompression sits just on the other side of that line, and is offered as an explicit step
+//! rather than folded into an accessor: [`kip::Kip1Segment::decompress`] allocates and can fail,
+//! which is exactly why it is a call a reader makes on purpose and not a slice it is handed.
 
+#[cfg(feature = "cnmt")]
+pub mod cnmt;
+#[cfg(all(feature = "alloc", feature = "kip"))]
+pub mod kip;
 #[cfg(feature = "mod0")]
 pub mod mod0;
 #[cfg(feature = "nacp")]

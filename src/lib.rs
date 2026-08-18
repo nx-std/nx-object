@@ -45,21 +45,24 @@
 //! |--------|-----------------------------------------------|:-----:|:------:|:-------:|
 //! | NRO    | The executable the homebrew menu launches     |   ✓   |   ✓    |    ✓    |
 //! | NSO    | The executable format system modules use      |   ✓   |   ✓    |    ✓    |
-//! | KIP    | An initial process the kernel starts directly |   ✓   |        |    ✓    |
+//! | KIP    | An initial process the kernel starts directly |   ✓   |   ✓    |    ✓    |
 //! | NACP   | How a title is presented and what it may do   |   ✓   |   ✓    |    ✓    |
 //! | NPDM   | The permissions a program is granted          |   ✓   |   ✓    |    ✓    |
 //! | RomFS  | The read-only filesystem a title ships        |   ✓   |   ✓    |    ✓    |
 //! | PFS0   | The flat archive an NSP is built from         |   ✓   |   ✓    |    ✓    |
 //! | MOD0   | The runtime header embedded in an executable  |   ✓   |   ✓    |         |
 //! | NCA    | The container a title's contents ship in      |   ✓   |   ✓    |    ✓    |
-//! | CNMT   | The content meta naming every NCA of a title  |   ✓   |        |    ✓    |
+//! | CNMT   | The content meta naming every NCA of a title  |   ✓   |   ✓    |    ✓    |
 //!
 //! # What this crate does not do
 //!
 //! It does not sign, encrypt, or verify anything. An NPDM's ACID signature is stored and reproduced
 //! but never checked, and an NSO's segment hashes are computed on write yet left to the caller on
-//! read. It also does not decompress: an NSO segment comes back as stored, because a reader that
-//! borrows its buffer has nowhere to put the expanded bytes.
+//! read.
+//!
+//! It does decompress, but never behind an accessor: a reader borrows its buffer and has nowhere to
+//! put expanded bytes, so expanding is a separate call that allocates and can fail. `Kip1Segment`
+//! and `Nso` each offer one; a segment slice always comes back exactly as the file stores it.
 //!
 //! NCA is where that line is most visible, because an NCA on disk is encrypted throughout.
 //! [`write::NcaBuilder`] produces the plaintext container and every hash covering it, then names

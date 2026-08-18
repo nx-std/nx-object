@@ -168,6 +168,116 @@ impl<'a> Nso<'a> {
         let size = self.header.data_file_size.get() as usize;
         &self.bytes[off..off + size]
     }
+
+    /// The `text` segment's bytes, expanded when the header marks it compressed.
+    ///
+    /// The result is the segment as the loader maps it, which includes the zero padding that
+    /// rounds it up to a page: the header's size and its hash both cover that padding, so trimming
+    /// it here would return bytes the recorded digest does not describe.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the LZ4 stream is malformed or does not expand to the length the
+    /// segment header records.
+    #[cfg(feature = "lz4-compression")]
+    pub fn text(&self) -> Result<alloc::vec::Vec<u8>, DecompressError> {
+        self.decompress(
+            Segment::Text,
+            self.text_compressed(),
+            self.header.text.size.get() as usize,
+            NsoFlags::TEXT_COMPRESS,
+        )
+    }
+
+    /// The `rodata` segment's bytes, expanded when the header marks it compressed.
+    ///
+    /// # Errors
+    ///
+    /// Fails on the same conditions as [`Nso::text`].
+    #[cfg(feature = "lz4-compression")]
+    pub fn rodata(&self) -> Result<alloc::vec::Vec<u8>, DecompressError> {
+        self.decompress(
+            Segment::RoData,
+            self.rodata_compressed(),
+            self.header.rodata.size.get() as usize,
+            NsoFlags::RODATA_COMPRESS,
+        )
+    }
+
+    /// The `data` segment's bytes, expanded when the header marks it compressed.
+    ///
+    /// # Errors
+    ///
+    /// Fails on the same conditions as [`Nso::text`].
+    #[cfg(feature = "lz4-compression")]
+    pub fn data(&self) -> Result<alloc::vec::Vec<u8>, DecompressError> {
+        self.decompress(
+            Segment::Data,
+            self.data_compressed(),
+            self.header.data.size.get() as usize,
+            NsoFlags::DATA_COMPRESS,
+        )
+    }
+
+    /// Expand `stored` when `flag` is set, or copy it out unchanged when it is not.
+    ///
+    /// The expanded length comes from the segment header rather than the stream: an NSO stores LZ4
+    /// blocks, which do not carry their own decompressed size.
+    #[cfg(feature = "lz4-compression")]
+    fn decompress(
+        &self,
+        segment: Segment,
+        stored: &[u8],
+        decompressed_size: usize,
+        flag: NsoFlags,
+    ) -> Result<alloc::vec::Vec<u8>, DecompressError> {
+        if !self.flags().contains(flag) {
+            return Ok(stored.to_vec());
+        }
+
+        lz4_flex::decompress(stored, decompressed_size).map_err(|err| DecompressError {
+            segment,
+            source: err,
+        })
+    }
+}
+
+/// Which segment of an NSO a failure belongs to.
+#[cfg(feature = "lz4-compression")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Segment {
+    /// The executable code.
+    Text,
+    /// The constants and dynamic linking tables.
+    RoData,
+    /// The writable initialized data.
+    Data,
+}
+
+#[cfg(feature = "lz4-compression")]
+impl core::fmt::Display for Segment {
+    /// Renders as the segment's name as the format spells it, so `RoData` prints as `rodata`.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Text => write!(f, "text"),
+            Self::RoData => write!(f, "rodata"),
+            Self::Data => write!(f, "data"),
+        }
+    }
+}
+
+/// Error returned by [`Nso::text`], [`Nso::rodata`], and [`Nso::data`].
+///
+/// Names the segment, because an NSO carries three and the stream alone does not say which failed.
+#[cfg(feature = "lz4-compression")]
+#[derive(Debug, thiserror::Error)]
+#[error("failed to decompress the {segment} segment")]
+pub struct DecompressError {
+    /// Which segment failed.
+    pub segment: Segment,
+    /// Why the stream was rejected.
+    #[source]
+    pub source: lz4_flex::block::DecompressError,
 }
 
 /// Errors that can occur when parsing an NSO from bytes
@@ -215,3 +325,114 @@ pub enum FromBytesError {
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub struct FromPtrError(FromBytesError);
+
+#[cfg(all(test, feature = "lz4-compression"))]
+mod decompress_tests {
+    use alloc::{vec, vec::Vec};
+
+    use super::Nso;
+    use crate::write::NsoBuilder;
+
+    /// Page size the builder rounds every segment up to before hashing and compressing it.
+    const PAGE: usize = 0x1000;
+
+    /// `data` followed by the zero padding that rounds it up to a whole page.
+    fn padded(data: &[u8]) -> Vec<u8> {
+        let mut padded = data.to_vec();
+        padded.resize(data.len().div_ceil(PAGE) * PAGE, 0);
+        padded
+    }
+
+    /// Build an NSO carrying the three segments, compressed or not as `compressed` says.
+    fn nso(text: Vec<u8>, rodata: Vec<u8>, data: Vec<u8>, compressed: bool) -> Vec<u8> {
+        NsoBuilder::new()
+            .text(text)
+            .rodata(rodata)
+            .data(data)
+            .compressed(compressed)
+            .build()
+            .expect("a small image should build")
+    }
+
+    #[test]
+    fn text_with_a_compressed_image_returns_the_segment_that_was_packed() {
+        //* Given
+        let text = vec![0xAA; 0x1000];
+        let image = nso(text.clone(), vec![0xBB; 0x800], vec![0xCC; 0x400], true);
+        let parsed = Nso::try_from_bytes(&image).expect("a built image should parse");
+
+        //* When
+        let segment = parsed.text().expect("a built segment should expand");
+
+        //* Then
+        assert_eq!(segment, padded(&text));
+    }
+
+    #[test]
+    fn rodata_with_a_compressed_image_returns_the_segment_that_was_packed() {
+        //* Given
+        let rodata = vec![0xBB; 0x800];
+        let image = nso(vec![0xAA; 0x1000], rodata.clone(), vec![0xCC; 0x400], true);
+        let parsed = Nso::try_from_bytes(&image).expect("a built image should parse");
+
+        //* When
+        let segment = parsed.rodata().expect("a built segment should expand");
+
+        //* Then
+        assert_eq!(segment, padded(&rodata));
+    }
+
+    #[test]
+    fn data_with_a_compressed_image_returns_the_segment_that_was_packed() {
+        //* Given
+        let data = vec![0xCC; 0x400];
+        let image = nso(vec![0xAA; 0x1000], vec![0xBB; 0x800], data.clone(), true);
+        let parsed = Nso::try_from_bytes(&image).expect("a built image should parse");
+
+        //* When
+        let segment = parsed.data().expect("a built segment should expand");
+
+        //* Then
+        assert_eq!(segment, padded(&data));
+    }
+
+    #[test]
+    fn text_with_an_uncompressed_image_returns_the_stored_bytes() {
+        //* Given
+        // No compression bit set, so the accessor must copy rather than try to expand.
+        let text = vec![0xAA; 0x1000];
+        let image = nso(text.clone(), vec![0xBB; 0x800], vec![0xCC; 0x400], false);
+        let parsed = Nso::try_from_bytes(&image).expect("a built image should parse");
+
+        //* When
+        let segment = parsed
+            .text()
+            .expect("an unpacked segment needs no expanding");
+
+        //* Then
+        assert_eq!(segment, padded(&text));
+    }
+
+    #[test]
+    fn text_with_a_corrupted_stream_fails() {
+        //* Given
+        // A compressed image whose stored bytes are overwritten: the LZ4 block no longer decodes.
+        let image = nso(
+            vec![0xAA; 0x1000],
+            vec![0xBB; 0x800],
+            vec![0xCC; 0x400],
+            true,
+        );
+        let mut corrupted = image.clone();
+        let parsed = Nso::try_from_bytes(&image).expect("a built image should parse");
+        let offset = parsed.header().text.file_offset.get() as usize;
+        corrupted[offset..offset + 0x10].fill(0xFF);
+        let parsed = Nso::try_from_bytes(&corrupted).expect("the header is untouched");
+
+        //* When
+        let result = parsed.text();
+
+        //* Then
+        assert!(result.is_err(), "a corrupted stream must not expand");
+    }
+}
