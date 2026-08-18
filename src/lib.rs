@@ -49,9 +49,9 @@
 //! | NACP   | How a title is presented and what it may do   |   ✓   |   ✓    |    ✓    |
 //! | NPDM   | The permissions a program is granted          |   ✓   |   ✓    |    ✓    |
 //! | RomFS  | The read-only filesystem a title ships        |   ✓   |   ✓    |    ✓    |
-//! | PFS0   | The flat archive an NSP is built from         |   ✓   |        |    ✓    |
+//! | PFS0   | The flat archive an NSP is built from         |   ✓   |   ✓    |    ✓    |
 //! | MOD0   | The runtime header embedded in an executable  |   ✓   |   ✓    |         |
-//! | NCA    | The container a title's contents ship in      |   ✓   |        |    ✓    |
+//! | NCA    | The container a title's contents ship in      |   ✓   |   ✓    |    ✓    |
 //! | CNMT   | The content meta naming every NCA of a title  |   ✓   |        |    ✓    |
 //!
 //! # What this crate does not do
@@ -63,7 +63,8 @@
 //!
 //! NCA is where that line is most visible, because an NCA on disk is encrypted throughout.
 //! [`write::NcaBuilder`] produces the plaintext container and every hash covering it, then names
-//! what is still owed; the caller supplies the keyset and the ciphers. The split is deliberate: a
+//! what is still owed; the caller supplies the keyset and the ciphers. Reading runs the same way
+//! in reverse: [`read::nca::Nca`] takes a buffer the caller has already decrypted. The split is deliberate: a
 //! keyset is secret material with its own provenance and handling rules, and a crate whose contract
 //! is bytes in, bytes out, no I/O is the wrong place to acquire one. Hashing stays here because a
 //! hash is part of the layout — it is what makes the recorded offsets checkable — while encryption
