@@ -6,10 +6,10 @@
 //! back-reference into already-decoded data, grouped under flag bytes and
 //! finished with a small trailer.
 //!
-//! Only compression is implemented here, since that is all the KIP1 builder
-//! needs. [`compress`] always allocates a worst-case output buffer up front, so
-//! it cannot fail and is infallible for any input (including empty), and it
-//! never mutates the caller's slice.
+//! [`compress`] always allocates a worst-case output buffer up front, so it
+//! cannot fail and is infallible for any input (including empty), and it never
+//! mutates the caller's slice. [`decompress`] is its inverse and is fallible,
+//! because it is the half that reads bytes the crate did not produce.
 //!
 //! # Why "backwards"
 //!
@@ -36,7 +36,9 @@
 //! [ raw bytes ][ 0x00 padding ][ u32 = 0 ]
 //! ```
 //!
-//! The decoded result is simply the leading `len - 4` bytes.
+//! The decoded result is the leading bytes, but *how many* is not recorded anywhere in the
+//! stream: the padding is indistinguishable from data. A decoder is told the length from
+//! outside — for a KIP1 segment it is the segment header's `decomp_size`.
 //!
 //! ## Packed (compressed input)
 //!
@@ -241,12 +243,31 @@ fn compress_into(input: &mut [u8], output: &mut [u8]) -> usize {
     input.reverse();
     output[..packed_len].reverse();
 
+    // The trailer is written into the bytes the packed layout saves, so a layout saving less than
+    // the trailer costs cannot be expressed: `extra_len` would have to be negative. Saving exactly
+    // the trailer is no better — that writes `extra_len` as zero, which is the marker for a stored
+    // stream, and the result would decode as one. Both cases fall back to storing, which is valid
+    // and, for the small highly compressible inputs that reach here, smaller anyway.
+    let trailer_fits =
+        len - best_packed - best_remaining > packed_header_size(best_remaining + best_packed);
+
     // Compare the aligned packed layout against simply storing the raw bytes.
-    if best_packed == 0 || len + 4 < ((best_packed + best_remaining + 3) & 0xFFFF_FFFC) + 8 {
+    if best_packed == 0
+        || !trailer_fits
+        || len + 4 < ((best_packed + best_remaining + 3) & 0xFFFF_FFFC) + 8
+    {
         store_uncompressed(input, output)
     } else {
         store_packed(input, output, packed_len, best_packed, best_remaining)
     }
+}
+
+/// Size of the trailer for a packed region ending at `packed_end`, alignment padding included.
+///
+/// The padding brings the trailer onto a 4-byte boundary and is counted in the recorded header
+/// size, so both the layout decision and the writer have to agree on it.
+fn packed_header_size(packed_end: usize) -> usize {
+    size_of::<Footer>() + (packed_end.wrapping_neg() & 3)
 }
 
 /// Emit `input` verbatim with a zero trailer marking the data as stored.
@@ -286,7 +307,7 @@ fn store_packed(
     output[..remaining].copy_from_slice(&input[..remaining]);
 
     let mut pos = remaining + best_packed;
-    let mut header_size = 12;
+    let header_size = packed_header_size(pos);
     let inc_len = input.len() - best_packed - remaining;
 
     // Pad with 0xFF so the trailer ends on a 4-byte boundary; the padding
@@ -294,7 +315,6 @@ fn store_packed(
     while pos & 3 != 0 {
         output[pos] = 0xFF;
         pos += 1;
-        header_size += 1;
     }
 
     // Trailer (see module docs): enc_len, header_size, extra_len.
@@ -421,6 +441,212 @@ impl<'a> MatchFinder<'a> {
     }
 }
 
+/// Decompress a BLZ stream produced by [`compress`] into `decompressed_size` bytes.
+///
+/// The size is a parameter because a stream does not carry it. A stored stream is padded to a
+/// 4-byte boundary and the padding is indistinguishable from data, so nothing in the bytes says
+/// where the original ended; a caller reading a KIP1 takes the length from the segment header's
+/// `decomp_size`, which is what the loader does too.
+///
+/// # Errors
+///
+/// Returns an error if the buffer is too short to hold a trailer, if the trailer's lengths do not
+/// describe a layout that fits the buffer, if a code reaches outside the region it may read, or if
+/// the stream does not hold `decompressed_size` bytes of output.
+pub fn decompress(data: &[u8], decompressed_size: usize) -> Result<Vec<u8>, DecompressError> {
+    let extra_len = trailing_u32(data, 4).ok_or(DecompressError::BufferTooSmall {
+        required: 4,
+        available: data.len(),
+    })?;
+
+    // A zero here is what marks a stored stream: the result is its leading bytes, and everything
+    // after them up to the trailer is alignment padding the caller's length tells us to drop.
+    if extra_len == 0 {
+        let stored = &data[..data.len() - 4];
+        return stored.get(..decompressed_size).map(<[u8]>::to_vec).ok_or(
+            DecompressError::UnexpectedLength {
+                expected: decompressed_size,
+                produced: stored.len(),
+            },
+        );
+    }
+
+    let footer_size = size_of::<Footer>();
+    let header_size = trailing_u32(data, 8).ok_or(DecompressError::BufferTooSmall {
+        required: footer_size,
+        available: data.len(),
+    })? as usize;
+    let enc_len = trailing_u32(data, footer_size).ok_or(DecompressError::BufferTooSmall {
+        required: footer_size,
+        available: data.len(),
+    })? as usize;
+
+    let total = data.len();
+    if header_size < footer_size || header_size > enc_len || enc_len > total {
+        return Err(DecompressError::MalformedTrailer {
+            enc_len,
+            header_size,
+            available: total,
+        });
+    }
+
+    // The final length is `dec_len + enc_len + extra_len`, and `dec_len` is `total - enc_len`.
+    let final_len =
+        total
+            .checked_add(extra_len as usize)
+            .ok_or(DecompressError::MalformedTrailer {
+                enc_len,
+                header_size,
+                available: total,
+            })?;
+
+    // Decoding runs in place, exactly as the loader does it: the stream is copied into a buffer
+    // sized for the result, then the packed region is consumed backwards while the output cursor
+    // walks down from the end. The two never cross, which is what lets the scheme work with no
+    // scratch buffer — and it is why the encoder reversed the region in the first place.
+    let mut out = vec![0u8; final_len];
+    out[..total].copy_from_slice(data);
+
+    let packed_start = total - enc_len;
+    let mut cmp = total - header_size;
+    let mut dst = final_len;
+
+    while cmp > packed_start {
+        cmp -= 1;
+        let mut flags = out[cmp];
+
+        for _ in 0..8 {
+            if cmp <= packed_start {
+                break;
+            }
+
+            if flags & FLAG_MASK_INIT == 0 {
+                cmp -= 1;
+                dst = copy_literal(&mut out, cmp, dst)?;
+            } else {
+                if cmp - packed_start < 2 {
+                    return Err(DecompressError::TruncatedCode { at: cmp });
+                }
+                let first = out[cmp - 1];
+                let second = out[cmp - 2];
+                cmp -= 2;
+
+                let length = usize::from(first >> 4) + MIN_MATCH;
+                let distance = ((usize::from(first & 0x0F) << 8) | usize::from(second)) + MIN_MATCH;
+                dst = copy_match(&mut out, dst, length, distance)?;
+            }
+
+            flags <<= FLAG_SHIFT;
+        }
+    }
+
+    if out.len() != decompressed_size {
+        return Err(DecompressError::UnexpectedLength {
+            expected: decompressed_size,
+            produced: out.len(),
+        });
+    }
+
+    Ok(out)
+}
+
+/// Copy one literal byte from the packed region to the output cursor.
+fn copy_literal(out: &mut [u8], cmp: usize, dst: usize) -> Result<usize, DecompressError> {
+    let dst = dst.checked_sub(1).ok_or(DecompressError::OutputUnderflow)?;
+    out[dst] = out[cmp];
+    Ok(dst)
+}
+
+/// Copy `length` bytes from `distance` ahead of the output cursor, one byte at a time.
+///
+/// Byte by byte rather than as a block: a match may overlap the region it writes into, which is how
+/// a run is encoded, and a block copy would read bytes this call has not produced yet.
+fn copy_match(
+    out: &mut [u8],
+    mut dst: usize,
+    length: usize,
+    distance: usize,
+) -> Result<usize, DecompressError> {
+    for _ in 0..length {
+        dst = dst.checked_sub(1).ok_or(DecompressError::OutputUnderflow)?;
+        let from = dst
+            .checked_add(distance)
+            .filter(|from| *from < out.len())
+            .ok_or(DecompressError::MatchOutOfBounds { dst, distance })?;
+        out[dst] = out[from];
+    }
+
+    Ok(dst)
+}
+
+/// The little-endian `u32` sitting `back` bytes from the end of `data`.
+fn trailing_u32(data: &[u8], back: usize) -> Option<u32> {
+    let start = data.len().checked_sub(back)?;
+    let bytes: [u8; 4] = data.get(start..start + 4)?.try_into().ok()?;
+    Some(u32::from_le_bytes(bytes))
+}
+
+/// Error returned by [`decompress`].
+#[derive(Debug, thiserror::Error)]
+pub enum DecompressError {
+    /// The buffer is too short to hold the trailer a stream ends with.
+    #[error("buffer too small: need {required} bytes, have {available}")]
+    BufferTooSmall {
+        /// Number of bytes required.
+        required: usize,
+        /// Number of bytes available.
+        available: usize,
+    },
+    /// The trailer's lengths do not describe a layout that fits the buffer.
+    ///
+    /// Holds the three quantities that disagree.
+    #[error(
+        "trailer claims {enc_len} encoded bytes under a {header_size}-byte header, in {available}"
+    )]
+    MalformedTrailer {
+        /// Length of the encoded region the trailer records.
+        enc_len: usize,
+        /// Size of the trailer and its padding, as recorded.
+        header_size: usize,
+        /// Number of bytes the stream actually holds.
+        available: usize,
+    },
+    /// A back-reference was cut short by the start of the packed region.
+    ///
+    /// Holds where in the stream the truncated code began.
+    #[error("a back-reference at {at} runs past the start of the packed region")]
+    TruncatedCode {
+        /// Offset the truncated code began at.
+        at: usize,
+    },
+    /// A code would write before the start of the output.
+    ///
+    /// The stream encodes more output than its trailer accounts for.
+    #[error("the stream decodes to more bytes than its trailer records")]
+    OutputUnderflow,
+    /// The stream does not hold the number of output bytes the caller asked for.
+    ///
+    /// Holds both lengths. For a KIP1 segment this means the header's `decomp_size` and the stream
+    /// disagree, so one of the two was rewritten without the other.
+    #[error("expected {expected} decompressed bytes, the stream holds {produced}")]
+    UnexpectedLength {
+        /// Length the caller asked for.
+        expected: usize,
+        /// Length the stream actually decodes to.
+        produced: usize,
+    },
+    /// A back-reference points past what has been decoded.
+    ///
+    /// Holds the write cursor and the distance that overshot it.
+    #[error("a back-reference at {dst} reaches {distance} bytes ahead, past the decoded output")]
+    MatchOutOfBounds {
+        /// Position being written.
+        dst: usize,
+        /// Distance the reference reached.
+        distance: usize,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -499,6 +725,227 @@ mod tests {
                 "finder diverged from brute force at position {pos}"
             );
         }
+    }
+
+    /// Assert a stream round-trips: what `compress` produced must decode back to `data`.
+    ///
+    /// This is the whole contract between the two halves, so every corpus below asserts it rather
+    /// than inspecting the encoded bytes — those are an implementation detail, the round trip is not.
+    fn assert_round_trips(data: &[u8]) {
+        let compressed = compress(data);
+        let decompressed =
+            decompress(&compressed, data.len()).expect("a stream we produced should decode");
+        assert_eq!(
+            decompressed,
+            data,
+            "round trip diverged for a {}-byte input",
+            data.len()
+        );
+    }
+
+    #[test]
+    fn compress_with_a_short_run_stores_rather_than_packing() {
+        //* Given
+        // Twelve identical bytes pack into less than the trailer costs. Choosing the packed layout
+        // here once underflowed `extra_len`; the fallback is what keeps the layout expressible.
+        let data = vec![0x11u8; 12];
+
+        //* When
+        let compressed = compress(&data);
+
+        //* Then
+        let extra_len = u32::from_le_bytes(
+            compressed[compressed.len() - 4..]
+                .try_into()
+                .expect("a 4-byte tail converts into [u8; 4]"),
+        );
+        assert_eq!(extra_len, 0, "the stream should be marked stored");
+        assert_eq!(
+            decompress(&compressed, data.len()).expect("a stored stream should decode"),
+            data
+        );
+    }
+
+    #[test]
+    fn compress_never_writes_a_zero_extra_length_on_a_packed_stream() {
+        //* Given
+        // Zero is the stored marker, so a packed stream carrying it decodes as the wrong form.
+        // The lengths that saved exactly the trailer size used to produce one.
+        let corpus = pseudo_random_bytes(600, 0x51ED_5EED_C0FF_EE01);
+
+        //* When
+        let streams: Vec<Vec<u8>> = (0..600)
+            .flat_map(|len| [compress(&vec![0x22u8; len]), compress(&corpus[..len])])
+            .collect();
+
+        //* Then
+        for (index, stream) in streams.iter().enumerate() {
+            let extra_len = u32::from_le_bytes(
+                stream[stream.len() - 4..]
+                    .try_into()
+                    .expect("a 4-byte tail converts into [u8; 4]"),
+            );
+            let stored_len = stream.len() - 4;
+            assert!(
+                extra_len != 0 || stored_len >= index / 2,
+                "stream {index} claims stored but is too short to hold its input"
+            );
+        }
+    }
+
+    #[test]
+    fn decompress_with_empty_input_returns_empty() {
+        //* Given
+        let data: Vec<u8> = Vec::new();
+
+        //* When
+        let compressed = compress(&data);
+
+        //* Then
+        assert_eq!(
+            decompress(&compressed, data.len()).expect("an empty stream should decode"),
+            data
+        );
+    }
+
+    #[test]
+    fn decompress_with_incompressible_input_round_trips() {
+        //* Given
+        // Random bytes take the stored path, which is the branch a packed decoder never reaches.
+        let data = pseudo_random_bytes(4096, 0x2545_F491_4F6C_DD1D);
+
+        //* When
+        let compressed = compress(&data);
+
+        //* Then
+        assert_eq!(
+            decompress(&compressed, data.len()).expect("a stored stream should decode"),
+            data
+        );
+    }
+
+    #[test]
+    fn decompress_with_rle_input_round_trips() {
+        //* Given
+        // A single run is the densest possible packing: every code is a maximal back-reference.
+        let data = vec![0xAAu8; 8192];
+
+        //* When
+        let compressed = compress(&data);
+
+        //* Then
+        assert_eq!(
+            decompress(&compressed, data.len()).expect("a packed stream should decode"),
+            data
+        );
+    }
+
+    #[test]
+    fn decompress_with_structured_input_round_trips() {
+        //* Given
+        // Literals and matches interleaved, so flag bytes carry a mix of both kinds of code.
+        let mut data = Vec::new();
+        for index in 0..512u32 {
+            data.extend_from_slice(&index.to_le_bytes());
+            data.extend_from_slice(b"nx-object");
+        }
+
+        //* When
+        let compressed = compress(&data);
+
+        //* Then
+        assert_eq!(
+            decompress(&compressed, data.len()).expect("a packed stream should decode"),
+            data
+        );
+    }
+
+    #[test]
+    fn decompress_with_a_prefix_that_stays_raw_round_trips() {
+        //* Given
+        // Incompressible head, highly compressible tail: the encoder leaves a verbatim prefix, so
+        // the decoder must place the packed region after it rather than at offset zero.
+        let mut data = pseudo_random_bytes(2048, 0x9E37_79B9_7F4A_7C15);
+        data.extend_from_slice(&vec![0x5Cu8; 8192]);
+
+        //* When
+        let compressed = compress(&data);
+
+        //* Then
+        assert_eq!(
+            decompress(&compressed, data.len()).expect("a packed stream should decode"),
+            data
+        );
+    }
+
+    #[test]
+    fn decompress_with_lengths_from_one_to_a_thousand_round_trips() {
+        //* Given
+        // Sweeps the boundaries: empty, shorter than a match, and every alignment of the trailer
+        // padding and the eight-code flag group.
+        let corpus = pseudo_random_bytes(1000, 0x0DDB_1A5E_5BAD_5EED);
+
+        //* When
+        let lengths = 0..corpus.len();
+
+        //* Then
+        for len in lengths {
+            assert_round_trips(&corpus[..len]);
+            assert_round_trips(&vec![0x11u8; len]);
+        }
+    }
+
+    #[test]
+    fn decompress_with_a_truncated_buffer_fails() {
+        //* Given
+        // Too short to hold even the trailing length word.
+        let data = [0u8; 2];
+
+        //* When
+        let result = decompress(&data, 8);
+
+        //* Then
+        assert!(matches!(
+            result,
+            Err(DecompressError::BufferTooSmall { .. })
+        ));
+    }
+
+    #[test]
+    fn decompress_with_a_trailer_claiming_more_than_the_buffer_fails() {
+        //* Given
+        // A non-zero extra length marks the stream packed, and the encoded length overruns.
+        let mut data = vec![0u8; 16];
+        data[4..8].copy_from_slice(&u32::MAX.to_le_bytes());
+        data[8..12].copy_from_slice(&12u32.to_le_bytes());
+        data[12..16].copy_from_slice(&1u32.to_le_bytes());
+
+        //* When
+        let result = decompress(&data, 8);
+
+        //* Then
+        assert!(matches!(
+            result,
+            Err(DecompressError::MalformedTrailer { .. })
+        ));
+    }
+
+    #[test]
+    fn decompress_with_a_header_size_below_the_trailer_fails() {
+        //* Given
+        let mut data = vec![0u8; 16];
+        data[4..8].copy_from_slice(&16u32.to_le_bytes());
+        data[8..12].copy_from_slice(&4u32.to_le_bytes());
+        data[12..16].copy_from_slice(&1u32.to_le_bytes());
+
+        //* When
+        let result = decompress(&data, 8);
+
+        //* Then
+        assert!(matches!(
+            result,
+            Err(DecompressError::MalformedTrailer { .. })
+        ));
     }
 
     #[test]
