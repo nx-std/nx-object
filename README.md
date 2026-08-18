@@ -2,10 +2,9 @@
 
 Zero-copy parsing and generation of Nintendo Switch file formats.
 
-Turns a byte buffer into a validated view of an NRO, NSO, NACP, NPDM, or RomFS image, and builds
-those formats -- and the NCA and CNMT a title is distributed as -- back out of their parts. Nothing
-is copied to read an image and nothing is written to disk to produce one, so the same definitions
-serve a host-side packer and code running on the console.
+Turns a byte buffer into a validated view of every format it covers, and builds each of them back
+out of its parts. Nothing is copied to read an image and nothing is written to disk to produce one,
+so the same definitions serve a host-side packer and code running on the console.
 
 ## Layers
 
@@ -28,27 +27,31 @@ NSO builders.
 |--------|------------------------------------------------|:-----:|:------:|:-------:|
 | NRO    | Nintendo Relocatable Object (homebrew)         |   ✓   |   ✓    |    ✓    |
 | NSO    | Nintendo Software Object (system module)       |   ✓   |   ✓    |    ✓    |
-| KIP    | Kernel Initial Process                         |   ✓   |        |    ✓    |
+| KIP    | Kernel Initial Process                         |   ✓   |   ✓    |    ✓    |
 | NACP   | Nintendo Application Control Property          |   ✓   |   ✓    |    ✓    |
 | NPDM   | Nintendo Program Description Metadata          |   ✓   |   ✓    |    ✓    |
 | RomFS  | Read-only filesystem image                     |   ✓   |   ✓    |    ✓    |
-| PFS0   | Partition filesystem archive                   |   ✓   |        |    ✓    |
+| PFS0   | Partition filesystem archive                   |   ✓   |   ✓    |    ✓    |
 | MOD0   | Module header embedded in executables          |   ✓   |   ✓    |         |
-| NCA    | Nintendo Content Archive                       |   ✓   |        |    ✓    |
-| CNMT   | Content meta naming every NCA of a title       |   ✓   |        |    ✓    |
+| NCA    | Nintendo Content Archive                       |   ✓   |   ✓    |    ✓    |
+| CNMT   | Content meta naming every NCA of a title       |   ✓   |   ✓    |    ✓    |
 
 ## What this crate does not do
 
 It does not sign, encrypt, or verify anything: an NPDM's ACID signature is stored and reproduced but
-never checked, and an NSO's segment hashes are computed on write yet left to the caller on read. It
-also does not decompress, because a reader that borrows its buffer has nowhere to put the expanded
-bytes.
+never checked, and an NSO's segment hashes are computed on write yet left to the caller on read.
 
-NCA is where that line is most visible, because an NCA on disk is encrypted throughout. `NcaBuilder`
-produces the plaintext container and every hash covering it, then names what is still owed; the
-caller supplies the keyset and the ciphers. Hashing stays here because a hash is part of the layout
--- it is what makes the recorded offsets checkable -- while encryption is a transformation applied to
-a layout that is already correct.
+It does decompress, but never behind an accessor. A reader borrows its buffer and has nowhere to put
+expanded bytes, so expanding is a separate call that allocates and can fail -- `Kip1Segment` and
+`Nso` each offer one, and a segment slice always comes back exactly as the file stores it.
+
+NCA is where the encryption line is most visible, because an NCA on disk is encrypted throughout.
+`NcaBuilder` produces the plaintext container and every hash covering it, then names what is still
+owed; the caller supplies the keyset and the ciphers. Reading runs the same way in reverse: `Nca`
+takes a buffer the caller has already decrypted, and an image still in ciphertext fails its magic
+check rather than parsing into nonsense. Hashing stays here because a hash is part of the layout --
+it is what makes the recorded offsets checkable -- while encryption is a transformation applied to a
+layout that is already correct.
 
 ## Usage
 
